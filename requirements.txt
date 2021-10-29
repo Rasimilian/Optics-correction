@@ -1,0 +1,4 @@
+cpymad==1.6.0
+numpy
+matplotlib
+pandas
