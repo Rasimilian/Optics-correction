@@ -99,11 +99,11 @@ class Structure():
         madx.elements[corrector[1]].kick = corrector[2] + kick_step
 
         # madx.input('select,flag=twiss,class=monitor;')
-        madx.input('ptc_create_universe;ptc_create_layout,model=2,method=2,nst=1;')
+        # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=2,nst=1;')
         # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=6,nst=10,exact=true;')
-        madx.ptc_twiss(icase=6,no=1,center_magnets=True,closed_orbit=True,table='twiss', file="madx\\log_file.txt")
+        # madx.ptc_twiss(icase=6,no=1,center_magnets=True,closed_orbit=True,table='twiss', file="madx\\log_file.txt")
 
-        # madx.twiss(sequence='RING', centre=True, table='twiss', file="madx\\log_file.txt")
+        madx.twiss(sequence='RING', centre=True, table='twiss', file="madx\\log_file.txt")
         # madx.input('twiss,sequence=RING, centre=True, table=twiss, file=madx\\log_file.txt;')
         madx.input('readtable,file="madx\\log_file.txt",table=twiss_in_bpms;')
 
@@ -155,10 +155,10 @@ class Structure():
 
         madx.input('use,sequence=RING;')
 
-        madx.input('ptc_create_universe;ptc_create_layout,model=2,method=2,nst=1;')
+        # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=2,nst=1;')
         # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=6,nst=10,exact=true;')
-        madx.ptc_twiss(icase=6,no=1,center_magnets=True,closed_orbit=True,table='twiss', file="madx\\log_file.txt",)
-        # madx.twiss(sequence='RING', centre=True, table='twiss', file="madx\\log_file.txt")
+        # madx.ptc_twiss(icase=6,no=1,center_magnets=True,closed_orbit=True,table='twiss', file="madx\\log_file.txt",)
+        madx.twiss(sequence='RING', centre=True, table='twiss', file="madx\\log_file.txt")
         madx.input('readtable,file="madx\\log_file.txt",table=twiss_in_BPMs;')
 
         twiss_table = madx.table.twiss_in_BPMs

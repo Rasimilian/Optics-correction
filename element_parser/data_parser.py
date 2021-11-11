@@ -139,5 +139,5 @@ def add_errors_to_structure_file(structure='madx\structures\VEPP4M_full1.txt', e
     madx.input('save, sequence=RING, file="VEPP4M_full1_all_errors1112.txt"')
     madx.quit()
 
-add_errors_to_structure_file()
+# add_errors_to_structure_file()
 
