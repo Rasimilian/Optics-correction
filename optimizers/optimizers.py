@@ -4,19 +4,21 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 
 from cpymad.madx import Madx
-from element_parser.data_parser import describe_elements, describe_correctors
+from element_parser.data_parser import describe_elements, describe_correctors, match_elements_indices_of_two_structures
 
 
 class GaussNewton():
     def __init__(self, structure, step, iteration=3):
         self.structure = structure
-        self.elements_to_vary, self.initial_parameters = describe_elements(self.structure.structure, "madx\elements\elems.txt")
+        self.elements_to_vary, self.initial_parameters = describe_elements(self.structure.structure, "madx\elements\combined_magnets.txt")
         self.correctors, _ = describe_correctors(self.structure.structure, "madx\correctors\correctors.txt")
         self.bad_correctors, _ = describe_correctors(self.structure.bad_structure, "madx\correctors\correctors.txt")
-        self.bad_elements_to_vary, self.bad_initial_parameters = describe_elements(self.structure.bad_structure, "madx\elements\elems.txt")
+        self.bad_elements_to_vary, self.bad_initial_parameters = describe_elements(self.structure.bad_structure, "madx\elements\combined_magnets.txt")
+        self.bad_elements_to_vary, self.bad_initial_parameters = match_elements_indices_of_two_structures(
+            self.elements_to_vary, self.initial_parameters, self.bad_elements_to_vary, self.bad_initial_parameters)
         self.elements_number = len(self.elements_to_vary)
-        # self.shape = [22, self.elements_number]
-        self.shape = [22 * 108, self.elements_number]
+        self.shape = [22, self.elements_number]
+        # self.shape = [22 * 108, self.elements_number]
         self.step = step
         self.iteration = iteration
 
@@ -77,7 +79,6 @@ class GaussNewton():
 
     def calculate_jacobian(self, accumulative_param_additive, model_response_matrix_1):
         J = np.zeros(self.shape)
-        k = 0
         for i in range(self.elements_number):
             now = datetime.now()
             print('Calc Jacob ', str(i) + '/' + str(self.elements_number))
@@ -90,11 +91,10 @@ class GaussNewton():
                                                                                accumulative_param_variation,
                                                                                self.correctors)
             # vector_2 = np.sum(model_response_matrix_1-model_response_matrix_2, 1)
-            # vector_2 = np.sum(model_response_matrix_1 - model_response_matrix_2, 0)
-            vector_2 = (model_response_matrix_1 - model_response_matrix_2).to_numpy().flatten()
+            vector_2 = np.sum(model_response_matrix_1 - model_response_matrix_2, 0)
+            # vector_2 = (model_response_matrix_1 - model_response_matrix_2).to_numpy().flatten()
             J[:,i] = vector_2 / self.step
             print(datetime.now()-now)
-            k += 1
 
         return J
 

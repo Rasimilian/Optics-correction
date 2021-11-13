@@ -106,6 +106,17 @@ def describe_elements1(structure_in_lines):
     return elements_description, elements_parameters
 
 
+def match_elements_indices_of_two_structures(elems_1, params_1, elems_2, params_2):
+    elems_3 = []
+    params_3 = []
+    for i in range(len(elems_1)):
+        for k in range(len(elems_2)):
+            if elems_1[i][0] == elems_2[k][0]:
+                elems_3.append(elems_2[k])
+                params_3.append(params_2[k])
+    return elems_3, params_3
+
+
 def read_BPMs(BPMs_data):
     """
     Read data from BPMs.
@@ -122,7 +133,7 @@ def read_BPMs(BPMs_data):
     return X, Y
 
 
-def add_errors_to_structure_file(structure='madx\structures\VEPP4M_full1.txt', elements='madx\elements\elems.txt'):
+def add_errors_to_structure_file(structure='madx\structures\VEPP4M_full1.txt', elements='madx\elements\combined_magnets.txt'):
     elements_description, elements_parameters = describe_elements(structure, elements)
 
     madx = Madx(stdout=False)
@@ -136,7 +147,7 @@ def add_errors_to_structure_file(structure='madx\structures\VEPP4M_full1.txt', e
         madx.elements[element[1]].k1 = 1.01*element[2]
         print(madx.elements[element[1]].k1)
 
-    madx.input('save, sequence=RING, file="VEPP4M_full1_all_errors1112.txt"')
+    madx.input('save, sequence=RING, file="VEPP4M_full1_combined_magnets_errors.txt"')
     madx.quit()
 
 # add_errors_to_structure_file()
