@@ -7,8 +7,8 @@ from cpymad.madx import Madx
 from element_parser.data_parser import describe_elements, describe_correctors, match_elements_indices_of_two_structures
 
 
-class GaussNewton():
-    def __init__(self, structure, step, iteration=3):
+class GaussNewton:
+    def __init__(self, structure, step, iteration=2):
         self.structure = structure
         self.elements_to_vary, self.initial_parameters = describe_elements(self.structure.structure, "madx\elements\combined_magnets.txt")
         self.correctors, _ = describe_correctors(self.structure.structure, "madx\correctors\correctors.txt")
