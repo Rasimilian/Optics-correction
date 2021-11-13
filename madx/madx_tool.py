@@ -8,8 +8,8 @@ from cpymad.madx import Madx
 from element_parser.data_parser import read_elements_from_file, describe_elements
 
 
-class Structure():
-    def __init__(self, structure_file="madx\structures\VEPP4M_full1.txt", bad_structure_file="madx\structures\VEPP4M_full1_all_errors.txt"):
+class Structure:
+    def __init__(self, structure_file="madx\structures\VEPP4M_full1.txt", bad_structure_file="madx\structures\VEPP4M_full1_all_grads_errors.txt"):
         """
         Initialize class Structure.
 
@@ -190,6 +190,7 @@ class Structure():
         accumulative_param_additive_ = accumulative_param_additive
         for num, element in enumerate(elements_to_vary):
             madx.elements[element[1]].k1 = element[2] + accumulative_param_additive_[num]
+        # print(accumulative_param_additive_)
 
         frames = []
         twiss_in_BPMs = self.make_kick_by_corrector(correctors[0], madx, kick_step=0)

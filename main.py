@@ -5,20 +5,29 @@ import cProfile
 
 from madx.madx_tool import Structure
 from optimizers.optimizers import GaussNewton, LevenbergMarquardt, GaussNewtonConstrained
+from optimizers.py_optimizers import LeastSquaresSolver
 from multiprocessing import Pool
 
-now = datetime.now()
+
 structure = Structure()
 
+now = datetime.now()
+
+optimizer = LeastSquaresSolver(structure)
+optimizer.optimize1()
+print(datetime.now()-now)
+#
+breakpoint()
 # response_matrix = structure.calculate_response_matrix(structure.structure, structure.structure_in_lines, 1e-4, 0)
 # print(datetime.now()-now)
 # plt.plot(structure.twiss_table_4D.s,structure.twiss_table_4D.x,'r')
 # plt.plot(structure.twiss_table_6D.s,structure.twiss_table_6D.x,'b')
 # plt.show()
 
-# optimizer = GaussNewton(structure, step=1e-3)
+now = datetime.now()
+optimizer = GaussNewton(structure, step=1e-3)
 # optimizer = LevenbergMarquardt(structure, step=1e-3)
-optimizer = GaussNewtonConstrained(structure, step=1e-3)
+# optimizer = GaussNewtonConstrained(structure, step=1e-3)
 parameters_delta = optimizer.optimize_lattice()
 # parameters_delta = optimizer.optimize_orbit()
 print(parameters_delta)

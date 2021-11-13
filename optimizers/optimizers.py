@@ -7,16 +7,16 @@ from cpymad.madx import Madx
 from element_parser.data_parser import describe_elements, describe_correctors
 
 
-class GaussNewton():
-    def __init__(self, structure, step, iteration=3):
+class GaussNewton:
+    def __init__(self, structure, step, iteration=2):
         self.structure = structure
         self.elements_to_vary, self.initial_parameters = describe_elements(self.structure.structure, "madx\elements\elems.txt")
         self.correctors, _ = describe_correctors(self.structure.structure, "madx\correctors\correctors.txt")
         self.bad_correctors, _ = describe_correctors(self.structure.bad_structure, "madx\correctors\correctors.txt")
         self.bad_elements_to_vary, self.bad_initial_parameters = describe_elements(self.structure.bad_structure, "madx\elements\elems.txt")
         self.elements_number = len(self.elements_to_vary)
-        # self.shape = [22, self.elements_number]
-        self.shape = [22 * 108, self.elements_number]
+        self.shape = [22, self.elements_number]
+        # self.shape = [22 * 108, self.elements_number]
         self.step = step
         self.iteration = iteration
 
@@ -90,8 +90,8 @@ class GaussNewton():
                                                                                accumulative_param_variation,
                                                                                self.correctors)
             # vector_2 = np.sum(model_response_matrix_1-model_response_matrix_2, 1)
-            # vector_2 = np.sum(model_response_matrix_1 - model_response_matrix_2, 0)
-            vector_2 = (model_response_matrix_1 - model_response_matrix_2).to_numpy().flatten()
+            vector_2 = np.sum(model_response_matrix_1 - model_response_matrix_2, 0)
+            # vector_2 = (model_response_matrix_1 - model_response_matrix_2).to_numpy().flatten()
             J[:,i] = vector_2 / self.step
             print(datetime.now()-now)
             k += 1
