@@ -2,86 +2,136 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+from tqdm import tqdm
 
-from cpymad.madx import Madx
+from cpymad.madx import Madx, TwissFailed
 from element_parser.data_parser import describe_elements, describe_correctors, match_elements_indices_of_two_structures
+
+np.set_printoptions(5)
 
 
 class GaussNewton:
-    def __init__(self, structure, step, iteration=2):
+    def __init__(self, structure, step, corrector_step, iteration=3,
+                 elements_to_vary="madx\elements\combined_magnets.txt"):
         self.structure = structure
-        self.elements_to_vary, self.initial_parameters = describe_elements(self.structure.structure, "madx\elements\combined_magnets.txt")
+        self.elements_to_vary, self.initial_parameters = describe_elements(self.structure.structure,
+                                                                           elements_to_vary)
         self.correctors, _ = describe_correctors(self.structure.structure, "madx\correctors\correctors.txt")
         self.bad_correctors, _ = describe_correctors(self.structure.bad_structure, "madx\correctors\correctors.txt")
-        self.bad_elements_to_vary, self.bad_initial_parameters = describe_elements(self.structure.bad_structure, "madx\elements\combined_magnets.txt")
+        self.bad_elements_to_vary, self.bad_initial_parameters = describe_elements(self.structure.bad_structure,
+                                                                                   elements_to_vary)
         self.bad_elements_to_vary, self.bad_initial_parameters = match_elements_indices_of_two_structures(
             self.elements_to_vary, self.initial_parameters, self.bad_elements_to_vary, self.bad_initial_parameters)
         self.elements_number = len(self.elements_to_vary)
-        self.shape = [22, self.elements_number]
-        # self.shape = [22 * 108, self.elements_number]
+        # self.shape = [44, self.elements_number]
+        # self.shape = [108, self.elements_number]
+        # self.shape = [22 * 54, self.elements_number]
         self.step = step
+        self.corrector_step = corrector_step
         self.iteration = iteration
 
-    def optimize_lattice(self):
+    def optimize_lattice(self, matrix_form="Coupled", residual_vector_form="Flatenned"):
         """
         Calculate necessary parameters changes to make structure correction.
 
         :param float step: step to vary elements parameters
         :return:
         """
+        if matrix_form == "Coupled":
+            self.shape = [22 * 108, self.elements_number]
+            # self.shape = [54, self.elements_number]
+        else:
+            self.shape = [22 * 54, self.elements_number]
+            # self.shape = [22, self.elements_number]
+        history = {"Initial residual": None,
+                   "Initial parameters": None,
+                   "Bad parameters": None,
+                   "Final residual": {"Iteration": {}},
+                   "Final parameters": {"Iteration": {}}}
         accumulative_param_additive = np.zeros(self.elements_number)
 
-        bad_response_matrix = self.structure.calculate_response_matrix(self.structure.bad_structure,
-                                                                       self.bad_elements_to_vary,
-                                                                       accumulative_param_additive,
-                                                                       self.bad_correctors)
-        model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
-                                                                         self.elements_to_vary,
-                                                                         accumulative_param_additive,
-                                                                         self.correctors)
+        try:
+            bad_response_matrix = self.structure.calculate_response_matrix(self.structure.bad_structure,
+                                                                           self.bad_elements_to_vary,
+                                                                           accumulative_param_additive,
+                                                                           self.bad_correctors,
+                                                                           self.corrector_step,
+                                                                           matrix_form)
+            model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
+                                                                             self.elements_to_vary,
+                                                                             accumulative_param_additive,
+                                                                             self.correctors,
+                                                                             self.corrector_step,
+                                                                             matrix_form)
+        except TwissFailed:
+            history["Optimization fails at beginning"] = True
+            print("Optimization fails at beginning")
+
         # initial_vector = np.sum(bad_response_matrix-model_response_matrix, 1)
-        initial_vector = np.sum(bad_response_matrix - model_response_matrix, 0)
-        # initial_vector = (bad_response_matrix - model_response_matrix).to_numpy().flatten()
-        initial_residual = np.sum(initial_vector*initial_vector)
+        # initial_vector = np.sum(bad_response_matrix - model_response_matrix, 0)
+        initial_vector = (bad_response_matrix - model_response_matrix).to_numpy().flatten()
+        initial_residual = np.sum(initial_vector * initial_vector)
 
-        count = 1
-        while count <= self.iteration:
-            model_response_matrix_1 = self.structure.calculate_response_matrix(self.structure.structure,
-                                                                               self.elements_to_vary,
-                                                                               accumulative_param_additive,
-                                                                               self.correctors)
-            # vector_1 = np.sum(bad_response_matrix-model_response_matrix_1, 1)
-            vector_1 = np.sum(bad_response_matrix - model_response_matrix_1, 0)
-            # vector_1 = (bad_response_matrix - model_response_matrix_1).to_numpy().flatten()
+        history["Initial residual"] = initial_residual
+        history["Initial parameters"] = self.initial_parameters
+        history["Bad parameters"] = self.bad_initial_parameters
 
-            J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1)
-            u, sv, v = self.drop_bad_singular_values(J)
-            delta = self.calculate_parameters_delta(J, u, sv, v, vector_1)
-            accumulative_param_additive += delta
-            count += 1
+        try:
+            count = 1
+            while count <= self.iteration:
+                model_response_matrix_1 = self.structure.calculate_response_matrix(self.structure.structure,
+                                                                                   self.elements_to_vary,
+                                                                                   accumulative_param_additive,
+                                                                                   self.correctors,
+                                                                                   self.corrector_step,
+                                                                                   matrix_form)
 
-            fitted_model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
-                                                                                    self.elements_to_vary,
-                                                                                    accumulative_param_additive,
-                                                                                    self.correctors)
-            # final_vector = np.sum(bad_response_matrix-fitted_model_response_matrix, 1)
-            final_vector = np.sum(bad_response_matrix - fitted_model_response_matrix, 0)
-            # final_vector = (bad_response_matrix - fitted_model_response_matrix).to_numpy().flatten()
-            final_residual = np.sum(final_vector*final_vector)
+                # vector_1 = np.sum(bad_response_matrix-model_response_matrix_1, 1)
+                # vector_1 = np.sum(bad_response_matrix - model_response_matrix_1, 0)
+                vector_1 = (bad_response_matrix - model_response_matrix_1).to_numpy().flatten()
 
-            print("Initial parameters: ", self.initial_parameters)
-            print("Bad parameters: ", self.bad_initial_parameters)
-            print("Final parameters: ", list(self.initial_parameters+accumulative_param_additive))
-            print("Initial residual: ", initial_residual)
-            print("Final residual: ", final_residual)
+                J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1, matrix_form)
+                u, sv, v = self.drop_bad_singular_values(J)
+                delta = self.calculate_parameters_delta(J, u, sv, v, vector_1)
+                accumulative_param_additive += delta
 
-        return accumulative_param_additive
+                try:
+                    fitted_model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
+                                                                                            self.elements_to_vary,
+                                                                                            accumulative_param_additive,
+                                                                                            self.correctors,
+                                                                                            self.corrector_step,
+                                                                                            matrix_form)
+                    # final_vector = np.sum(bad_response_matrix-fitted_model_response_matrix, 1)
+                    # final_vector = np.sum(bad_response_matrix - fitted_model_response_matrix, 0)
+                    final_vector = (bad_response_matrix - fitted_model_response_matrix).to_numpy().flatten()
+                    final_residual = np.sum(final_vector * final_vector)
+                    history["Final residual"]["Iteration"].update({count: {"Residual": final_residual}})
 
-    def calculate_jacobian(self, accumulative_param_additive, model_response_matrix_1):
+                    print("Initial residual: ", initial_residual)
+                    print("Final residual: ", final_residual)
+                except TwissFailed:
+                    history["fitted_model_response_matrix fails"] = True
+                    print("fitted_model_response_matrix fails")
+
+                history["Final parameters"]["Iteration"].update(
+                    {count: {"Parameters": (self.initial_parameters + np.array(accumulative_param_additive)).tolist()}})
+
+                print("Initial parameters: ", np.array(self.initial_parameters))
+                print("Bad parameters: ", np.array(self.bad_initial_parameters))
+                print("Final parameters: ", self.initial_parameters + np.array(accumulative_param_additive))
+                count += 1
+        except TwissFailed:
+            history["Optimization fails at end"] = True
+            print("Optimization fails at end")
+
+        return accumulative_param_additive, history
+
+    def calculate_jacobian(self, accumulative_param_additive, model_response_matrix_1, matrix_form):
         J = np.zeros(self.shape)
-        for i in range(self.elements_number):
-            now = datetime.now()
-            print('Calc Jacob ', str(i) + '/' + str(self.elements_number))
+        for i in tqdm(range(self.elements_number)):
+            # now = datetime.now()
+            # print('Calc Jacob ', str(i) + '/' + str(self.elements_number))
             accumulative_param_variation = np.zeros(self.elements_number)
             accumulative_param_variation[i] = self.step
             accumulative_param_variation += accumulative_param_additive
@@ -89,32 +139,35 @@ class GaussNewton:
             model_response_matrix_2 = self.structure.calculate_response_matrix(self.structure.structure,
                                                                                self.elements_to_vary,
                                                                                accumulative_param_variation,
-                                                                               self.correctors)
+                                                                               self.correctors,
+                                                                               self.corrector_step,
+                                                                               matrix_form)
+
             # vector_2 = np.sum(model_response_matrix_1-model_response_matrix_2, 1)
-            vector_2 = np.sum(model_response_matrix_1 - model_response_matrix_2, 0)
-            # vector_2 = (model_response_matrix_1 - model_response_matrix_2).to_numpy().flatten()
-            J[:,i] = vector_2 / self.step
-            print(datetime.now()-now)
+            # vector_2 = np.sum(model_response_matrix_1 - model_response_matrix_2, 0)
+            vector_2 = (model_response_matrix_1 - model_response_matrix_2).to_numpy().flatten()
+            J[:, i] = vector_2 / self.step
+            # print(datetime.now() - now)
 
         return J
 
     def drop_bad_singular_values(self, J):
-        svd = np.linalg.svd(np.matmul(J.T,J), full_matrices=False)
+        svd = np.linalg.svd(np.matmul(J.T, J), full_matrices=False)
         u, sv, v = svd
         print("Singulars: ", sv)
         # plt.plot(sv,marker='o')
         # plt.show()
         sv = np.linalg.pinv(np.diag(sv))
         for i in range(len(sv)):
-            if sv[i,i] > np.inf:
-                sv[i,i] = 0
+            if sv[i, i] > np.inf:
+                sv[i, i] = 0
 
         return u, sv, v
 
     def calculate_parameters_delta(self, J, u, sv, v, vector_1):
-        J_new = np.matmul(np.matmul(v.T,sv),u.T)
+        J_new = np.matmul(np.matmul(v.T, sv), u.T)
         # delta = -np.matmul(np.linalg.pinv(np.matmul(J.T,J)),J.T).dot(vector_1)
-        delta = -np.matmul(J_new,J.T).dot(vector_1)
+        delta = -np.matmul(J_new, J.T).dot(vector_1)
         # delta = np.where(np.abs(delta)>1e-3, 0.5*delta, delta) # To remove twiss instabillity
         print("delta", delta)
 
@@ -127,14 +180,15 @@ class GaussNewton:
 
         quadrupole_alignments = {}
         for i, quadrupole in enumerate(self.elements_to_vary):
-            response_matrix, response_matrix_at_beginning = self.structure.calculate_response_matrix_on_quadrupole_variation(self.structure.structure,
-                                                                                                                             quadrupole,
-                                                                                                                             1e-5,
-                                                                                                                             i)
+            response_matrix, response_matrix_at_beginning = self.structure.calculate_response_matrix_on_quadrupole_variation(
+                self.structure.structure,
+                quadrupole,
+                1e-5,
+                i)
             delta = np.linalg.pinv(response_matrix).dot(experimental_responses[quadrupole[0]])
             quadrupole_alignments[quadrupole[0]] = delta
             print('Quadrupole alignment:', str(i) + '/' + str(self.elements_number))
-            print('asdd',response_matrix_at_beginning)
+            print('asdd', response_matrix_at_beginning)
             x = response_matrix_at_beginning.dot(delta)
             print("final", x)
 
@@ -144,86 +198,191 @@ class GaussNewton:
 
 
 class LevenbergMarquardt(GaussNewton):
-    def __init__(self, structure, step, iteration=1, coefficient_lambda=0.0001):
-        super().__init__(structure, step, iteration)
+    def __init__(self, structure, step, corrector_step, iteration=3,
+                 elements_to_vary="madx\elements\combined_magnets.txt", coefficient_lambda=1e-5):
+        super().__init__(structure, step, corrector_step, iteration, elements_to_vary)
         self.coefficient_lambda = coefficient_lambda
 
     def drop_bad_singular_values(self, J):
-        svd = np.linalg.svd(np.matmul(J.T,J)+self.coefficient_lambda*np.diag(np.matmul(J.T,J)), full_matrices=False)
+        svd = np.linalg.svd(np.matmul(J.T, J) + self.coefficient_lambda * np.diag(np.diag(np.matmul(J.T, J))),
+                            full_matrices=False)
         u, sv, v = svd
         print("Singulars: ", sv)
         sv = np.linalg.pinv(np.diag(sv))
         for i in range(len(sv)):
-            if sv[i,i] > np.inf:
-                sv[i,i] = 0
+            if sv[i, i] > np.inf:
+                sv[i, i] = 0
 
         return u, sv, v
 
 
 class GaussNewtonConstrained(GaussNewton):
-    def __init__(self, structure, step, iteration=1):
-        super().__init__(structure, step, iteration)
-        self.weights = np.ones(self.elements_number)*1e-3
+    def __init__(self, structure, step, corrector_step, iteration=3,
+                 elements_to_vary="madx\elements\combined_magnets.txt", weights=1e-2):
+        super().__init__(structure, step, corrector_step, iteration, elements_to_vary)
+        self.weights = np.ones(self.elements_number) * weights
 
-    def optimize_lattice(self):
+    def optimize_lattice(self, matrix_form="Uncoupled", residual_vector_form="Flatenned"):
         """
         Calculate necessary parameters changes to make structure correction.
 
         :param float step: step to vary elements parameters
         :return:
         """
+        if matrix_form == "Coupled":
+            self.shape = [22 * 108, self.elements_number]
+            # self.shape = [44, self.elements_number]
+        else:
+            self.shape = [22 * 54, self.elements_number]
+            # self.shape = [22, self.elements_number]
+        history = {"Initial residual": None,
+                   "Initial parameters": None,
+                   "Bad parameters": None,
+                   "Final residual": {"Iteration": {}},
+                   "Final parameters": {"Iteration": {}}}
         accumulative_param_additive = delta = np.zeros(self.elements_number)
 
-        bad_response_matrix = self.structure.calculate_response_matrix(self.structure.bad_structure,
-                                                                       self.bad_elements_to_vary,
-                                                                       accumulative_param_additive,
-                                                                       self.bad_correctors)
-        model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
-                                                                         self.elements_to_vary,
-                                                                         accumulative_param_additive,
-                                                                         self.correctors)
+        try:
+            bad_response_matrix = self.structure.calculate_response_matrix(self.structure.bad_structure,
+                                                                           self.bad_elements_to_vary,
+                                                                           accumulative_param_additive,
+                                                                           self.bad_correctors,
+                                                                           self.corrector_step,
+                                                                           matrix_form)
+            model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
+                                                                             self.elements_to_vary,
+                                                                             accumulative_param_additive,
+                                                                             self.correctors,
+                                                                             self.corrector_step,
+                                                                             matrix_form)
+        except TwissFailed:
+            history["Optimization fails at beginning"] = True
+            print("Optimization fails at beginning")
+
         # initial_vector = np.sum(bad_response_matrix-model_response_matrix, 1)
         # initial_vector = np.sum(bad_response_matrix - model_response_matrix, 0)
         initial_vector = (bad_response_matrix - model_response_matrix).to_numpy().flatten()
-        initial_vector = np.concatenate((initial_vector, self.weights*delta))
+        initial_vector = np.concatenate((initial_vector, self.weights * delta))
         initial_residual = np.sum(initial_vector * initial_vector)
 
-        count = 1
-        while count <= self.iteration:
-            model_response_matrix_1 = self.structure.calculate_response_matrix(self.structure.structure,
-                                                                               self.elements_to_vary,
-                                                                               accumulative_param_additive,
-                                                                               self.correctors)
-            # vector_1 = np.sum(bad_response_matrix-model_response_matrix_1, 1)
-            # vector_1 = np.sum(bad_response_matrix - model_response_matrix_1, 0)
-            vector_1 = (bad_response_matrix - model_response_matrix_1).to_numpy().flatten()
-            vector_1 = np.concatenate((vector_1, self.weights * delta))
+        history["Initial residual"] = initial_residual
+        history["Initial parameters"] = self.initial_parameters
+        history["Bad parameters"] = self.bad_initial_parameters
 
-            J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1)
-            J = self.create_modified_jacobian(J, delta)
-            u, sv, v = self.drop_bad_singular_values(J)
-            delta = self.calculate_parameters_delta(J, u, sv, v, vector_1)
-            accumulative_param_additive += delta
-            count += 1
+        try:
+            count = 1
+            while count <= self.iteration:
+                model_response_matrix_1 = self.structure.calculate_response_matrix(self.structure.structure,
+                                                                                   self.elements_to_vary,
+                                                                                   accumulative_param_additive,
+                                                                                   self.correctors,
+                                                                                   self.corrector_step,
+                                                                                   matrix_form)
 
-            fitted_model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
-                                                                                    self.elements_to_vary,
-                                                                                    accumulative_param_additive,
-                                                                                    self.correctors)
-            # final_vector = np.sum(bad_response_matrix-fitted_model_response_matrix, 1)
-            # final_vector = np.sum(bad_response_matrix - fitted_model_response_matrix, 0)
-            final_vector = (bad_response_matrix - fitted_model_response_matrix).to_numpy().flatten()
-            final_vector = np.concatenate((final_vector, self.weights * delta))
-            final_residual = np.sum(final_vector * final_vector)
+                # vector_1 = np.sum(bad_response_matrix-model_response_matrix_1, 1)
+                # vector_1 = np.sum(bad_response_matrix - model_response_matrix_1, 0)
+                vector_1 = (bad_response_matrix - model_response_matrix_1).to_numpy().flatten()
+                vector_1 = np.concatenate((vector_1, self.weights * delta))
 
-            print("Initial parameters: ", self.initial_parameters)
-            print("Bad parameters: ", self.bad_initial_parameters)
-            print("Final parameters: ", list(self.initial_parameters + accumulative_param_additive))
-            print("Initial residual: ", initial_residual)
-            print("Final residual: ", final_residual)
+                J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1, matrix_form)
+                J = self.create_modified_jacobian(J, delta)
+                u, sv, v = self.drop_bad_singular_values(J)
+                delta = self.calculate_parameters_delta(J, u, sv, v, vector_1)
+                accumulative_param_additive += delta
 
-        return accumulative_param_additive
+                try:
+                    fitted_model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
+                                                                                            self.elements_to_vary,
+                                                                                            accumulative_param_additive,
+                                                                                            self.correctors,
+                                                                                            self.corrector_step,
+                                                                                            matrix_form)
+                    # final_vector = np.sum(bad_response_matrix-fitted_model_response_matrix, 1)
+                    # final_vector = np.sum(bad_response_matrix - fitted_model_response_matrix, 0)
+                    final_vector = (bad_response_matrix - fitted_model_response_matrix).to_numpy().flatten()
+                    final_vector = np.concatenate((final_vector, self.weights * delta))
+                    final_residual = np.sum(final_vector * final_vector)
+                    history["Final residual"]["Iteration"].update({"Residual": final_residual})
+
+                    print("Initial residual: ", initial_residual)
+                    print("Final residual: ", final_residual)
+                except TwissFailed:
+                    history["fitted_model_response_matrix fails"] = True
+                    print("fitted_model_response_matrix fails")
+
+                history["Final parameters"]["Iteration"].update(
+                    {"Parameters": (self.initial_parameters + np.array(accumulative_param_additive)).tolist()})
+
+                print("Initial parameters: ", np.array(self.initial_parameters))
+                print("Bad parameters: ", np.array(self.bad_initial_parameters))
+                print("Final parameters: ", self.initial_parameters + np.array(accumulative_param_additive))
+                count += 1
+        except TwissFailed:
+            history["Optimization fails at end"] = True
+            print("Optimization fails at end")
+
+        return accumulative_param_additive, history
+
+    # def optimize_lattice(self):
+    #     """
+    #     Calculate necessary parameters changes to make structure correction.
+    #
+    #     :param float step: step to vary elements parameters
+    #     :return:
+    #     """
+    #     accumulative_param_additive = delta = np.zeros(self.elements_number)
+    #
+    #     bad_response_matrix = self.structure.calculate_response_matrix(self.structure.bad_structure,
+    #                                                                    self.bad_elements_to_vary,
+    #                                                                    accumulative_param_additive,
+    #                                                                    self.bad_correctors)
+    #     model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
+    #                                                                      self.elements_to_vary,
+    #                                                                      accumulative_param_additive,
+    #                                                                      self.correctors)
+    #     # initial_vector = np.sum(bad_response_matrix-model_response_matrix, 1)
+    #     # initial_vector = np.sum(bad_response_matrix - model_response_matrix, 0)
+    #     initial_vector = (bad_response_matrix - model_response_matrix).to_numpy().flatten()
+    #     initial_vector = np.concatenate((initial_vector, self.weights * delta))
+    #     initial_residual = np.sum(initial_vector * initial_vector)
+    #
+    #     count = 1
+    #     while count <= self.iteration:
+    #         model_response_matrix_1 = self.structure.calculate_response_matrix(self.structure.structure,
+    #                                                                            self.elements_to_vary,
+    #                                                                            accumulative_param_additive,
+    #                                                                            self.correctors)
+    #         # vector_1 = np.sum(bad_response_matrix-model_response_matrix_1, 1)
+    #         # vector_1 = np.sum(bad_response_matrix - model_response_matrix_1, 0)
+    #         vector_1 = (bad_response_matrix - model_response_matrix_1).to_numpy().flatten()
+    #         vector_1 = np.concatenate((vector_1, self.weights * delta))
+    #
+    #         J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1, matrix_form)
+    #         J = self.create_modified_jacobian(J, delta)
+    #         u, sv, v = self.drop_bad_singular_values(J)
+    #         delta = self.calculate_parameters_delta(J, u, sv, v, vector_1)
+    #         accumulative_param_additive += delta
+    #         count += 1
+    #
+    #         fitted_model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
+    #                                                                                 self.elements_to_vary,
+    #                                                                                 accumulative_param_additive,
+    #                                                                                 self.correctors)
+    #         # final_vector = np.sum(bad_response_matrix-fitted_model_response_matrix, 1)
+    #         # final_vector = np.sum(bad_response_matrix - fitted_model_response_matrix, 0)
+    #         final_vector = (bad_response_matrix - fitted_model_response_matrix).to_numpy().flatten()
+    #         final_vector = np.concatenate((final_vector, self.weights * delta))
+    #         final_residual = np.sum(final_vector * final_vector)
+    #
+    #         print("Initial parameters: ", self.initial_parameters)
+    #         print("Bad parameters: ", self.bad_initial_parameters)
+    #         print("Final parameters: ", list(self.initial_parameters + accumulative_param_additive))
+    #         print("Initial residual: ", initial_residual)
+    #         print("Final residual: ", final_residual)
+    #
+    #     return accumulative_param_additive
 
     def create_modified_jacobian(self, J, delta_qrad):
+        # TODO check W
         W = np.diag(self.weights * delta_qrad)
         return np.concatenate((J, W), axis=0)

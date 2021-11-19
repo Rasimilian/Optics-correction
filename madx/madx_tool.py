@@ -107,8 +107,11 @@ class Structure():
         # madx.input('twiss,sequence=RING, centre=True, table=twiss, file=madx\\log_file.txt;')
         madx.input('readtable,file="madx\\log_file.txt",table=twiss_in_bpms;')
 
+        # if madx.elements[corrector[1]]._attr['parent'] == 'hkicker':
+        #     twiss_table = madx.table.twiss_in_bpms.x
+        # elif madx.elements[corrector[1]]._attr['parent'] == 'vkicker':
+        #     twiss_table = madx.table.twiss_in_bpms.y
         twiss_table = madx.table.twiss_in_bpms.x, madx.table.twiss_in_bpms.y
-        # print(twiss_table[0])
         madx.elements[corrector[1]].kick = corrector[2]
         # print(datetime.now()-now)
         return twiss_table
@@ -167,7 +170,8 @@ class Structure():
         return twiss_table
 
     def calculate_response_matrix(self, structure, elements_to_vary,
-                                  accumulative_param_additive, correctors, corrector_step=1e-6, accumulative_alignment_additive=None,areErrorsNeeded=None):
+                                  accumulative_param_additive, correctors, corrector_step=1e-4, matrix_form="Coupled",
+                                  accumulative_alignment_additive=None,areErrorsNeeded=None):
         """
         Calculate response matrix.
 
@@ -205,14 +209,26 @@ class Structure():
             # print(len(twiss_in_BPMs_1))
             # assert len(twiss_in_BPMs_1) != len(twiss_in_BPMs)
 
-            df_x = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0])/corrector_step, columns=[corrector[0]])
-            df_y = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1])/corrector_step, columns=[corrector[0]])
+            if matrix_form == "Coupled":
+                df_x = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0])/corrector_step, columns=[corrector[0] + '_x'])
+                df_y = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1])/corrector_step, columns=[corrector[0] + '_y'])
+                frames.append(df_x)
+                frames.append(df_y)
             # df_dx = pd.DataFrame((twiss_in_BPMs_1.dx - twiss_in_BPMs.dx)/variation_step, columns = [element[0]])
             # df_dy = pd.DataFrame((twiss_in_BPMs_1.dy - twiss_in_BPMs.dy)/variation_step, columns = [element[0]])
 
-            df = pd.concat([df_x,df_y], ignore_index = True)
+            else:
+                if madx.elements[corrector[1]]._attr['parent'] == 'hkicker':
+                    df_one_coord = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0]) / corrector_step, columns=[corrector[0]])
+                elif madx.elements[corrector[1]]._attr['parent'] == 'vkicker':
+                    df_one_coord = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1]) / corrector_step, columns=[corrector[0]])
+                frames.append(df_one_coord)
+            # df = pd.concat([df_x,df_y], ignore_index = True)
             # df = pd.concat([df_x,df_y,df_dx,df_dy], ignore_index = True)
-            frames.append(df)
+            # frames.append(df_x)
+            # frames.append(df_y)
+            # frames.append(df_one_coord)
+
 
         matrix = pd.concat(frames, axis=1)
         # print("Response Matrix:\n",matrix)

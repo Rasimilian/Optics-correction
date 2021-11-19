@@ -1,0 +1,61 @@
+{
+    "Lattice": "VEPP4M_full1_3_quads_errors.txt",
+    "Elements": "quads_test.txt",
+    "Optimizer": "GaussNewton",
+    "Gradient step": 0.01,
+    "Corrector step": 1e-05,
+    "Weigths_or_lambdas": null,
+    "Matrix form": "Coupled",
+    "Execution time": "0:00:33.832672",
+    "Results": {
+        "Initial residual": 18.478865318177043,
+        "Initial parameters": [
+            0.23857,
+            0.93011966,
+            -0.8932828
+        ],
+        "Bad parameters": [
+            0.24157,
+            0.94011966,
+            -0.8832828
+        ],
+        "Final residual": {
+            "Iteration": {
+                "1": {
+                    "Residual": 0.0011888335089826822
+                },
+                "2": {
+                    "Residual": 5.737617656993836e-08
+                },
+                "3": {
+                    "Residual": 4.6798218414558535e-12
+                }
+            }
+        },
+        "Final parameters": {
+            "Iteration": {
+                "1": {
+                    "Parameters": [
+                        0.24154135882807443,
+                        0.9399600961464556,
+                        -0.8833000773217108
+                    ]
+                },
+                "2": {
+                    "Parameters": [
+                        0.24157016934686193,
+                        0.9401183028982035,
+                        -0.8832818552128114
+                    ]
+                },
+                "3": {
+                    "Parameters": [
+                        0.2415699988004915,
+                        0.9401196568935452,
+                        -0.8832828067842969
+                    ]
+                }
+            }
+        }
+    }
+}
