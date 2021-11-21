@@ -11,13 +11,13 @@ from multiprocessing import Pool
 
 structure = Structure()
 
-now = datetime.now()
-
-optimizer = LeastSquaresSolver(structure)
-optimizer.optimize1()
-print(datetime.now()-now)
+# now = datetime.now()
 #
-breakpoint()
+# optimizer = LeastSquaresSolver(structure)
+# optimizer.optimize1()
+# print(datetime.now()-now)
+#
+# breakpoint()
 # response_matrix = structure.calculate_response_matrix(structure.structure, structure.structure_in_lines, 1e-4, 0)
 # print(datetime.now()-now)
 # plt.plot(structure.twiss_table_4D.s,structure.twiss_table_4D.x,'r')
@@ -26,9 +26,9 @@ breakpoint()
 
 
 now = datetime.now()
-optimizer = GaussNewton(structure, step=1e-3)
-# optimizer = LevenbergMarquardt(structure, step=1e-3)
-# optimizer = GaussNewtonConstrained(structure, step=1e-3)
+# optimizer = GaussNewton(structure, step=1e-3)
+optimizer = LevenbergMarquardt(structure, step=1e-3)
+# optimizer = GaussNewtonConstrained(structure, step=3e-3)
 parameters_delta = optimizer.optimize_lattice()
 # parameters_delta = optimizer.optimize_orbit()
 print(parameters_delta)
