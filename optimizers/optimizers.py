@@ -2,13 +2,15 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+from typing import List, Optional, Union, Tuple
 
 from cpymad.madx import Madx
+from madx.madx_tool import Structure
 from element_parser.data_parser import describe_elements, describe_correctors, match_elements_indices_of_two_structures
 
 
 class GaussNewton:
-    def __init__(self, structure, step, iteration=2):
+    def __init__(self, structure: Structure, step: float, iteration: int = 2):
         self.structure = structure
         self.elements_to_vary, self.initial_parameters = describe_elements(self.structure.structure,
                                                                            "madx\elements\combined_magnets.txt")
@@ -24,7 +26,11 @@ class GaussNewton:
         self.step = step
         self.iteration = iteration
 
-    def _get_residual(self, bad_response_matrix, model_response_matrix, weights=None, vector_type="Flatenned"):
+    def _get_residual(self,
+                      bad_response_matrix: pd.DataFrame,
+                      model_response_matrix: pd.DataFrame,
+                      weights: Optional[Union[List, np.ndarray]] = None,
+                      vector_type: str = "Flatenned") -> Tuple[np.ndarray, float]:
         if vector_type == "axis-0 summed":
             vector = np.sum(bad_response_matrix - model_response_matrix, 0)
         elif vector_type == "axis-1 summed":
@@ -38,12 +44,11 @@ class GaussNewton:
 
         return vector, residual
 
-    def optimize_lattice(self):
+    def optimize_lattice(self) -> np.ndarray:
         """
         Calculate necessary parameters changes to make structure correction.
 
-        :param float step: step to vary elements parameters
-        :return:
+        :return: parameters deltas which fit erroneous structure
         """
         accumulative_param_additive = np.zeros(self.elements_number)
 
@@ -85,7 +90,15 @@ class GaussNewton:
 
         return accumulative_param_additive
 
-    def calculate_jacobian(self, accumulative_param_additive, model_response_matrix_1):
+    def calculate_jacobian(self, accumulative_param_additive: np.ndarray,
+                           model_response_matrix_1: pd.DataFrame) -> np.ndarray:
+        """
+        Function to calculate Jacobian.
+
+        :param accumulative_param_additive: parameters deltas from last iteration
+        :param model_response_matrix_1: interim response matrix
+        :return: Jacobian
+        """
         J = np.zeros(self.shape)
         for i in range(self.elements_number):
             now = datetime.now()
@@ -105,7 +118,13 @@ class GaussNewton:
 
         return J
 
-    def drop_bad_singular_values(self, J):
+    def drop_bad_singular_values(self, J: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        SVD decomposition of Jacobian. Some singular values can be dropped out.
+
+        :param J: Jacobian
+        :return: SVD decomposed Jacobian
+        """
         svd = np.linalg.svd(np.matmul(J.T, J), full_matrices=False)
         u, sv, v = svd
         print("Singulars: ", sv)
@@ -121,7 +140,18 @@ class GaussNewton:
 
         return u, sv, v
 
-    def calculate_parameters_delta(self, J, u, sv, v, vector_1):
+    def calculate_parameters_delta(self, J: np.ndarray, u: np.ndarray, sv: np.ndarray, v: np.ndarray,
+                                   vector_1: np.ndarray) -> np.ndarray:
+        """
+        Get final parameters deltas for elements to fit erroneous response matrix.
+
+        :param J: Jacobian
+        :param u: SVD of Jacobian
+        :param sv: SVD of Jacobian
+        :param v: SVD of Jacobian
+        :param vector_1: interim residual vector
+        :return: parameters deltas
+        """
         J_new = np.matmul(np.matmul(v.T, sv), u.T)
         # delta = -np.matmul(np.linalg.pinv(np.matmul(J.T,J)),J.T).dot(vector_1)
         delta = -np.matmul(J_new, J.T).dot(vector_1)
@@ -130,7 +160,12 @@ class GaussNewton:
 
         return delta
 
-    def optimize_orbit(self):
+    def optimize_orbit(self) -> np.ndarray:
+        """
+        Calculate necessary parameters changes to make orbit correction.
+
+        :return: parameters deltas for element alignments
+        """
         experimental_responses = self.structure.collect_responses_on_quadrupole_kicks(self.structure.structure,
                                                                                       self.elements_to_vary,
                                                                                       gradient_step=1e-5)
@@ -155,22 +190,28 @@ class GaussNewton:
 
 
 class LevenbergMarquardt(GaussNewton):
-    def __init__(self, structure, step, iteration=1, coefficient_lambda=0.001):
+    def __init__(self, structure: Structure, step: float, iteration: int = 1, coefficient_lambda: float = 0.001):
         super().__init__(structure, step, iteration)
         self.coefficient_lambda = coefficient_lambda
 
-    def drop_bad_singular_values(self, J):
+    def drop_bad_singular_values(self, J: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        SVD decomposition of Jacobian. Some singular values can be dropped out.
+
+        :param J: Jacobian
+        :return: SVD decomposed Jacobian
+        """
         svd = np.linalg.svd(np.matmul(J.T, J) + self.coefficient_lambda * np.diag(np.diag(np.matmul(J.T, J))),
                             full_matrices=False)
         u, sv, v = svd
         print("Singulars: ", sv)
 
-        plt.plot(sv,marker='o', markersize=5, label="Modified Jacobian")
+        plt.plot(sv, marker='o', markersize=5, label="Modified Jacobian")
         svd_1 = np.linalg.svd(np.matmul(J.T, J), full_matrices=False)
         _, sv_1, _ = svd_1
         plt.plot(sv_1, color='r', marker='o', markersize=5, label="Not modified Jacobian")
         plt.legend()
-        print("Singulars delta", sv-sv_1)
+        print("Singulars delta", sv - sv_1)
         plt.show()
 
         sv = np.linalg.pinv(np.diag(sv))
@@ -182,17 +223,16 @@ class LevenbergMarquardt(GaussNewton):
 
 
 class GaussNewtonConstrained(GaussNewton):
-    def __init__(self, structure, step, iteration=1):
+    def __init__(self, structure: Structure, step: float, iteration: int = 1):
         super().__init__(structure, step, iteration)
         self.weights = np.ones(self.elements_number) * 1e-3
         self.weights = np.random.rand(self.elements_number) * 1e-4
 
-    def optimize_lattice(self):
+    def optimize_lattice(self) -> np.ndarray:
         """
         Calculate necessary parameters changes to make structure correction.
 
-        :param float step: step to vary elements parameters
-        :return:
+        :return: parameters deltas which fit erroneous structure
         """
         accumulative_param_additive = delta = np.zeros(self.elements_number)
 
@@ -214,7 +254,7 @@ class GaussNewtonConstrained(GaussNewton):
                                                                                accumulative_param_additive,
                                                                                self.correctors)
             vector_1, _ = self._get_residual(bad_response_matrix, model_response_matrix_1,
-                                                                  self.weights * delta)
+                                             self.weights * delta)
 
             J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1)
             u, sv, v = self.drop_bad_singular_values(J, delta)
@@ -237,22 +277,36 @@ class GaussNewtonConstrained(GaussNewton):
 
         return accumulative_param_additive
 
-    def create_modified_jacobian(self, J, delta_qrad):
+    def create_modified_jacobian(self, J: np.ndarray, delta_qrad: np.ndarray) -> np.ndarray:
+        """
+        Function to get modified Jacobian.
+
+        :param J: Jacobian
+        :param delta_qrad: parameters deltas from last iteration
+        :return: modified Jacobian
+        """
         W = np.diag(self.weights * delta_qrad)
         return np.concatenate((J, W), axis=0)
 
-    def drop_bad_singular_values(self, J, delta_qrad):
+    def drop_bad_singular_values(self, J: np.ndarray, delta_grad: np.ndarray) -> Tuple[
+        np.ndarray, np.ndarray, np.ndarray]:
+        """
+        SVD decomposition of Jacobian. Some singular values can be dropped out.
+
+        :param J: Jacobian
+        :return: SVD decomposed Jacobian
+        """
         J_modified = self.create_modified_jacobian(J, delta_qrad)
         svd = np.linalg.svd(np.matmul(J_modified.T, J_modified), full_matrices=False)
         u, sv, v = svd
         print("Singulars: ", sv)
 
-        plt.plot(sv,marker='o', markersize=5, label="Modified Jacobian")
+        plt.plot(sv, marker='o', markersize=5, label="Modified Jacobian")
         svd_1 = np.linalg.svd(np.matmul(J.T, J), full_matrices=False)
         _, sv_1, _ = svd_1
         plt.plot(sv_1, color='r', marker='o', markersize=5, label="Not modified Jacobian")
         plt.legend()
-        print("Singulars delta", sv-sv_1)
+        print("Singulars delta", sv - sv_1)
         plt.show()
 
         sv = np.linalg.pinv(np.diag(sv))

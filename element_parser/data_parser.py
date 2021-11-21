@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
+from typing import List, Tuple
 
 from cpymad.madx import Madx
 
 
-def read_elements_from_file(elements_file):
+def read_elements_from_file(elements_file: str) -> Tuple[List[str], int]:
     """
     Read elements list from file.
 
@@ -23,7 +24,7 @@ def read_elements_from_file(elements_file):
     return elements_list, count
 
 
-def describe_correctors(structure: str, elements_file: str):
+def describe_correctors(structure: str, elements_file: str) -> Tuple[List[Tuple[str, int, float]], List[float]]:
     """
     Find predefined elements in structure and write their parameters.
 
@@ -51,7 +52,7 @@ def describe_correctors(structure: str, elements_file: str):
     return elements_description, elements_parameters
 
 
-def describe_elements(structure: str, elements_file: str):
+def describe_elements(structure: str, elements_file: str) -> Tuple[List[Tuple[str, int, float]], List[float]]:
     """
     Find predefined elements in structure and write their parameters.
 
@@ -79,7 +80,7 @@ def describe_elements(structure: str, elements_file: str):
     return elements_description, elements_parameters
 
 
-def describe_elements1(structure_in_lines):
+def describe_elements1(structure_in_lines: List[str]) -> Tuple[List[str], List[float]]:
     """
     Find predefined elements in structure and write their parameters.
 
@@ -106,7 +107,10 @@ def describe_elements1(structure_in_lines):
     return elements_description, elements_parameters
 
 
-def match_elements_indices_of_two_structures(elems_1, params_1, elems_2, params_2):
+def match_elements_indices_of_two_structures(elems_1: List[Tuple[str, int, float]],
+                                             params_1: List[float],
+                                             elems_2: List[Tuple[str, int, float]],
+                                             params_2: List[float]) -> Tuple[List[Tuple[str, int, float]], List[float]]:
     elems_3 = []
     params_3 = []
     for i in range(len(elems_1)):
@@ -117,7 +121,7 @@ def match_elements_indices_of_two_structures(elems_1, params_1, elems_2, params_
     return elems_3, params_3
 
 
-def read_BPMs(BPMs_data):
+def read_BPMs(BPMs_data: str) -> Tuple[np.ndarray, np.ndarray]:
     """
     Read data from BPMs.
 
@@ -133,7 +137,8 @@ def read_BPMs(BPMs_data):
     return X, Y
 
 
-def add_errors_to_structure_file(structure='madx\structures\VEPP4M_full1.txt', elements='madx\elements\combined_magnets.txt'):
+def add_errors_to_structure_file(structure: str = 'madx\structures\VEPP4M_full1.txt',
+                                 elements: str = 'madx\elements\combined_magnets.txt'):
     elements_description, elements_parameters = describe_elements(structure, elements)
 
     madx = Madx(stdout=False)

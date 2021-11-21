@@ -2,14 +2,16 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
-
+from typing import List, Tuple
 from cpymad.madx import Madx
 
 from element_parser.data_parser import read_elements_from_file, describe_elements
 
 
 class Structure():
-    def __init__(self, structure_file="madx\structures\VEPP4M_full1.txt", bad_structure_file="madx\structures\VEPP4M_full1_combined_magnets_errors.txt"):
+    def __init__(self,
+                 structure_file: str = "madx\structures\VEPP4M_full1.txt",
+                 bad_structure_file: str = "madx\structures\VEPP4M_full1_combined_magnets_errors.txt"):
         """
         Initialize class Structure.
 
@@ -29,7 +31,7 @@ class Structure():
         self.bad_twiss_table_4D = self.calculate_structure_4D(self.bad_structure)
         self.bad_twiss_table_6D = self.calculate_structure_6D(self.bad_structure)
 
-    def calculate_structure_4D(self, structure, initial_imperfections=None):
+    def calculate_structure_4D(self, structure: str, initial_imperfections=None) -> Madx.twiss:
         """
         Calculate TWISS table for 4D beam motion.
 
@@ -55,7 +57,7 @@ class Structure():
 
         return twiss_table
 
-    def calculate_structure_6D(self, structure, initial_imperfections=None):
+    def calculate_structure_6D(self, structure: str, initial_imperfections=None) -> Madx.twiss:
         """
         Calculate TWISS table for 6D beam motion.
 
@@ -76,7 +78,7 @@ class Structure():
         madx.input('ptc_create_universe;ptc_create_layout,model=2,method=2,nst=1;')
         # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=6,nst=10,exact=true;')
 
-        madx.ptc_twiss(icase=6,no=1,center_magnets=True,closed_orbit=True,table='twiss', file="madx\\log_file.txt")
+        madx.ptc_twiss(icase=6, no=1, center_magnets=True, closed_orbit=True, table='twiss', file="madx\\log_file.txt")
         madx.input('readtable,file="madx\\log_file.txt",table=twiss_in_BPMs;')
 
         twiss_table = madx.table.twiss_in_BPMs
@@ -84,7 +86,10 @@ class Structure():
 
         return twiss_table
 
-    def make_kick_by_corrector(self, corrector, madx, kick_step):
+    def make_kick_by_corrector(self,
+                               corrector: Tuple[str, int, float],
+                               madx: Madx,
+                               kick_step: float) -> Tuple[np.ndarray, np.ndarray]:
         """
         Change elements parameters in structure.
 
@@ -113,14 +118,18 @@ class Structure():
         # print(datetime.now()-now)
         return twiss_table
 
-    def make_kick_by_quadrupole(self, quadrupole, madx, gradient_step):
+    def make_kick_by_quadrupole(self,
+                                quadrupole: Tuple[str, int, float],
+                                madx: Madx,
+                                gradient_step: float) -> Tuple[np.ndarray, np.ndarray]:
         madx.elements[quadrupole[1]].k1 = quadrupole[2] + gradient_step
 
         madx.input('select,flag=twiss,class=monitor;')
         madx.input('ptc_create_universe;ptc_create_layout,model=2,method=2,nst=1;')
         # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=6,nst=10,exact=true;')
 
-        madx.ptc_twiss(icase=6,no=1,center_magnets=True,closed_orbit=True,table='twiss', file="madx\\log_file.txt",)
+        madx.ptc_twiss(icase=6, no=1, center_magnets=True, closed_orbit=True, table='twiss',
+                       file="madx\\log_file.txt", )
 
         # madx.twiss(sequence='RING', centre=True, table='twiss', file="madx\\log_file.txt")
         # madx.input('twiss,sequence=RING, centre=True, table=twiss, file=madx\\log_file.txt;')
@@ -131,7 +140,10 @@ class Structure():
 
         return twiss_table
 
-    def change_structure_for_correction(self, structure, elements_to_vary, accumulative_param_additive):
+    def change_structure_for_correction(self,
+                                        structure: str,
+                                        elements_to_vary: List[Tuple[str, int, float]],
+                                        accumulative_param_additive: np.ndarray) -> Madx.twiss:
         """
         Change elements parameters in structure for correction. All locations are involved.
 
@@ -166,8 +178,14 @@ class Structure():
 
         return twiss_table
 
-    def calculate_response_matrix(self, structure, elements_to_vary,
-                                  accumulative_param_additive, correctors, corrector_step=1e-6, accumulative_alignment_additive=None,areErrorsNeeded=None):
+    def calculate_response_matrix(self,
+                                  structure: str,
+                                  elements_to_vary: List[Tuple[str, int, float]],
+                                  accumulative_param_additive: np.ndarray,
+                                  correctors: List[Tuple[str, int, float]],
+                                  corrector_step: float = 1e-6,
+                                  accumulative_alignment_additive=None,
+                                  areErrorsNeeded=None) -> pd.DataFrame:
         """
         Calculate response matrix.
 
@@ -205,12 +223,12 @@ class Structure():
             # print(len(twiss_in_BPMs_1))
             # assert len(twiss_in_BPMs_1) != len(twiss_in_BPMs)
 
-            df_x = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0])/corrector_step, columns=[corrector[0]])
-            df_y = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1])/corrector_step, columns=[corrector[0]])
+            df_x = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0]) / corrector_step, columns=[corrector[0]])
+            df_y = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1]) / corrector_step, columns=[corrector[0]])
             # df_dx = pd.DataFrame((twiss_in_BPMs_1.dx - twiss_in_BPMs.dx)/variation_step, columns = [element[0]])
             # df_dy = pd.DataFrame((twiss_in_BPMs_1.dy - twiss_in_BPMs.dy)/variation_step, columns = [element[0]])
 
-            df = pd.concat([df_x,df_y], ignore_index = True)
+            df = pd.concat([df_x, df_y], ignore_index=True)
             # df = pd.concat([df_x,df_y,df_dx,df_dy], ignore_index = True)
             frames.append(df)
 
@@ -221,7 +239,12 @@ class Structure():
         madx.quit()
         return matrix
 
-    def calculate_response_matrix_on_quadrupole_variation(self, structure, quadrupole, gradient_step, num, alignment_step=1e-6):
+    def calculate_response_matrix_on_quadrupole_variation(self,
+                                                          structure: str,
+                                                          quadrupole: Tuple[str, int, float],
+                                                          gradient_step: float,
+                                                          num: int,
+                                                          alignment_step: float = 1e-6) -> Tuple[pd.DataFrame, pd.DataFrame]:
         alignments = ['dx', 'dy']
 
         madx = Madx(stdout=False)
@@ -237,8 +260,10 @@ class Structure():
         for alignment in alignments:
             madx.input('ealign,' + alignment + ':=' + str(alignment_step) + ';')
             twiss_in_BPMs_1 = self.calculate_twiss_in_bpms(madx, False)
-            df_x = pd.DataFrame([(twiss_in_BPMs_1[0][num] - twiss_in_BPMs[0][num]) / alignment_step], columns=[quadrupole[0] + '_' + alignment])
-            df_y = pd.DataFrame([(twiss_in_BPMs_1[1][num] - twiss_in_BPMs[1][num]) / alignment_step], columns=[quadrupole[0] + '_' + alignment])
+            df_x = pd.DataFrame([(twiss_in_BPMs_1[0][num] - twiss_in_BPMs[0][num]) / alignment_step],
+                                columns=[quadrupole[0] + '_' + alignment])
+            df_y = pd.DataFrame([(twiss_in_BPMs_1[1][num] - twiss_in_BPMs[1][num]) / alignment_step],
+                                columns=[quadrupole[0] + '_' + alignment])
             df = pd.concat([df_x, df_y], ignore_index=True)
             frames.append(df)
         madx.input('ealign,' + alignment + ':=' + str(0) + ';')
@@ -250,15 +275,17 @@ class Structure():
         for alignment in alignments:
             madx.input('ealign,' + alignment + ':=' + str(alignment_step) + ';')
             twiss_in_BPMs_1 = self.calculate_twiss_in_bpms(madx, True)
-            df_x = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0]) / alignment_step, columns=[quadrupole[0]+'_'+alignment])
-            df_y = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1]) / alignment_step, columns=[quadrupole[0]+'_'+alignment])
+            df_x = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0]) / alignment_step,
+                                columns=[quadrupole[0] + '_' + alignment])
+            df_y = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1]) / alignment_step,
+                                columns=[quadrupole[0] + '_' + alignment])
             df = pd.concat([df_x, df_y], ignore_index=True)
             frames.append(df)
         madx.input('ealign,' + alignment + ':=' + str(0) + ';')
 
         madx.input('select,flag=errors_table,class=quadrupole;')
         madx.input('etable,table=errors_table;')
-        print('asd',madx.table.errors_table.dx, madx.table.errors_table.dy)
+        print('asd', madx.table.errors_table.dx, madx.table.errors_table.dy)
         matrix = pd.concat(frames, axis=1)
 
         frames = []
@@ -267,8 +294,10 @@ class Structure():
         for alignment in alignments:
             madx.input('ealign,' + alignment + ':=' + str(alignment_step) + ';')
             twiss_in_BPMs_1 = self.calculate_twiss_in_bpms(madx, True)
-            df_x = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0]) / alignment_step, columns=[quadrupole[0]+'_'+alignment])
-            df_y = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1]) / alignment_step, columns=[quadrupole[0]+'_'+alignment])
+            df_x = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0]) / alignment_step,
+                                columns=[quadrupole[0] + '_' + alignment])
+            df_y = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1]) / alignment_step,
+                                columns=[quadrupole[0] + '_' + alignment])
             df = pd.concat([df_x, df_y], ignore_index=True)
             frames.append(df)
         matrix1 = pd.concat(frames, axis=1)
@@ -277,9 +306,9 @@ class Structure():
         print(madx.table.errors_table.dx, madx.table.errors_table.dy)
 
         madx.quit()
-        return matrix1-matrix, matrix0
+        return matrix1 - matrix, matrix0
 
-    def calculate_twiss_in_bpms(self, madx, at_centre):
+    def calculate_twiss_in_bpms(self, madx: Madx, at_centre: bool) -> Tuple[np.ndarray, np.ndarray]:
         madx.input('select,flag=twiss,clear;')
         if at_centre == True:
             madx.input('select,flag=twiss,class=monitor;')
@@ -323,14 +352,17 @@ class Structure():
         madx.quit()
         return matrix
 
-    def add_imperfections_to_structure(self, elements_with_errors, accumulative_alignment_additive,
+    def add_imperfections_to_structure(self,
+                                       elements_with_errors,
+                                       accumulative_alignment_additive,
                                        error_magnitude=1e-6):
-        seed = np.random.randint(0,999999999)
+        seed = np.random.randint(0, 999999999)
         self.madx.input('eoption,seed=' + str(seed) + ',add=True;')
 
-        for element, dx, dy in zip(elements_with_errors, accumulative_alignment_additive, accumulative_alignment_additive):
+        for element, dx, dy in zip(elements_with_errors, accumulative_alignment_additive,
+                                   accumulative_alignment_additive):
             madx.input('select,flag=error,pattern=' + element + ';')
-            madx.input('ealign,dx:='+str(error_magnitude)+'*gauss(),dy:='+str(error_magnitude)+'*gauss();')
+            madx.input('ealign,dx:=' + str(error_magnitude) + '*gauss(),dy:=' + str(error_magnitude) + '*gauss();')
             madx.input('select,flag=error,clear;')
 
         madx.input('esave,file="madx\machine_imperfections";')
@@ -352,7 +384,7 @@ class Imperfection(Structure):
         self.madx = madx
         self.elements_list, self.elements_number = read_elements_from_file(file_with_elements_to_spoil)
 
-        if not isinstance(types_of_errors,list): self.types_of_errors = list[types_of_errors]
+        if not isinstance(types_of_errors, list): self.types_of_errors = list[types_of_errors]
 
     def add_errors(self, error_amplitude=0.000001, element_type='quadrupole'):
         """
@@ -362,7 +394,7 @@ class Imperfection(Structure):
         :param str element_type: type of elements to add errors to
         :return: float table with created errors
         """
-        seed = np.random.randint(0,999999999)
+        seed = np.random.randint(0, 999999999)
         self.madx.input('eoption,seed=' + str(seed) + ',add=True;')
 
         for element in elements:
@@ -371,7 +403,7 @@ class Imperfection(Structure):
             madx.input('select,flag=error,class=' + element_type + ',pattern=' + element + ';')
 
         # TODO add types_of_errors choice
-        madx.input('ealign,dx:='+str(error_amplitude)+'*gauss(),dy:='+str(error_amplitude)+'*gauss();')
+        madx.input('ealign,dx:=' + str(error_amplitude) + '*gauss(),dy:=' + str(error_amplitude) + '*gauss();')
         madx.input('esave,file="madx\machine_imperfections";')
         madx.input('select,flag=myerrortable, class=quadrupole;')
         madx.input('etable,table=errors_table;')
