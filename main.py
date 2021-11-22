@@ -26,8 +26,8 @@ structure = Structure()
 
 
 now = datetime.now()
-# optimizer = GaussNewton(structure, step=1e-3)
-optimizer = LevenbergMarquardt(structure, step=1e-3)
+optimizer = GaussNewton(structure, step=1e-3)
+# optimizer = LevenbergMarquardt(structure, step=1e-3)
 # optimizer = GaussNewtonConstrained(structure, step=3e-3)
 parameters_delta = optimizer.optimize_lattice()
 # parameters_delta = optimizer.optimize_orbit()

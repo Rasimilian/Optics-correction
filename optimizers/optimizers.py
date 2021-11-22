@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from typing import List, Optional, Union, Tuple
 
-from cpymad.madx import Madx
+from cpymad.madx import Madx, TwissFailed
 from madx.madx_tool import Structure
 from element_parser.data_parser import describe_elements, describe_correctors, match_elements_indices_of_two_structures
 
@@ -13,11 +13,11 @@ class GaussNewton:
     def __init__(self, structure: Structure, step: float, iteration: int = 2):
         self.structure = structure
         self.elements_to_vary, self.initial_parameters = describe_elements(self.structure.structure,
-                                                                           "madx\elements\combined_magnets.txt")
+                                                                           "madx\elements\elems.txt")
         self.correctors, _ = describe_correctors(self.structure.structure, "madx\correctors\correctors.txt")
         self.bad_correctors, _ = describe_correctors(self.structure.bad_structure, "madx\correctors\correctors.txt")
         self.bad_elements_to_vary, self.bad_initial_parameters = describe_elements(self.structure.bad_structure,
-                                                                                   "madx\elements\combined_magnets.txt")
+                                                                                   "madx\elements\elems.txt")
         self.bad_elements_to_vary, self.bad_initial_parameters = match_elements_indices_of_two_structures(
             self.elements_to_vary, self.initial_parameters, self.bad_elements_to_vary, self.bad_initial_parameters)
         self.elements_number = len(self.elements_to_vary)
@@ -62,8 +62,10 @@ class GaussNewton:
                                                                          self.correctors)
         initial_vector, initial_residual = self._get_residual(bad_response_matrix, model_response_matrix)
 
+        final_residual = 1000
         count = 1
-        while count <= self.iteration:
+        # while count <= self.iteration:
+        while final_residual > 1:
             model_response_matrix_1 = self.structure.calculate_response_matrix(self.structure.structure,
                                                                                self.elements_to_vary,
                                                                                accumulative_param_additive,
@@ -76,12 +78,24 @@ class GaussNewton:
             accumulative_param_additive += delta
             count += 1
 
-            fitted_model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
-                                                                                    self.elements_to_vary,
-                                                                                    accumulative_param_additive,
-                                                                                    self.correctors)
+            is_fitted = False
+            k = 1
+            while not is_fitted:
+                try:
+                    fitted_model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
+                                                                                            self.elements_to_vary,
+                                                                                            accumulative_param_additive,
+                                                                                            self.correctors)
+                    is_fitted = True
+                except TwissFailed:
+                    accumulative_param_additive = np.where(np.abs(accumulative_param_additive) < k, accumulative_param_additive, 0)
+                    k /= 2
+                    print("deltas reduced")
+                    print(k)
+                    print(accumulative_param_additive)
             final_vector, final_residual = self._get_residual(bad_response_matrix, fitted_model_response_matrix)
 
+            print("Iteration: ", count)
             print("Initial parameters: ", self.initial_parameters)
             print("Bad parameters: ", self.bad_initial_parameters)
             print("Final parameters: ", list(self.initial_parameters + accumulative_param_additive))
@@ -129,9 +143,9 @@ class GaussNewton:
         u, sv, v = svd
         print("Singulars: ", sv)
 
-        plt.plot(sv, marker='o', markersize=5, label="Singular values of J")
-        plt.legend()
-        plt.show()
+        # plt.plot(sv, marker='o', markersize=5, label="Singular values of J")
+        # plt.legend()
+        # plt.show()
 
         sv = np.linalg.pinv(np.diag(sv))
         for i in range(len(sv)):
@@ -190,7 +204,7 @@ class GaussNewton:
 
 
 class LevenbergMarquardt(GaussNewton):
-    def __init__(self, structure: Structure, step: float, iteration: int = 1, coefficient_lambda: float = 0.001):
+    def __init__(self, structure: Structure, step: float, iteration: int = 2, coefficient_lambda: float = 0.001):
         super().__init__(structure, step, iteration)
         self.coefficient_lambda = coefficient_lambda
 
@@ -206,13 +220,13 @@ class LevenbergMarquardt(GaussNewton):
         u, sv, v = svd
         print("Singulars: ", sv)
 
-        plt.plot(sv, marker='o', markersize=5, label="Modified Jacobian")
-        svd_1 = np.linalg.svd(np.matmul(J.T, J), full_matrices=False)
-        _, sv_1, _ = svd_1
-        plt.plot(sv_1, color='r', marker='o', markersize=5, label="Not modified Jacobian")
-        plt.legend()
-        print("Singulars delta", sv - sv_1)
-        plt.show()
+        # plt.plot(sv, marker='o', markersize=5, label="Modified Jacobian")
+        # svd_1 = np.linalg.svd(np.matmul(J.T, J), full_matrices=False)
+        # _, sv_1, _ = svd_1
+        # plt.plot(sv_1, color='r', marker='o', markersize=5, label="Not modified Jacobian")
+        # plt.legend()
+        # print("Singulars delta", sv - sv_1)
+        # plt.show()
 
         sv = np.linalg.pinv(np.diag(sv))
         for i in range(len(sv)):

@@ -11,7 +11,7 @@ from element_parser.data_parser import read_elements_from_file, describe_element
 class Structure():
     def __init__(self,
                  structure_file: str = "madx\structures\VEPP4M_full1.txt",
-                 bad_structure_file: str = "madx\structures\VEPP4M_full1_combined_magnets_errors.txt"):
+                 bad_structure_file: str = "madx\structures\VEPP4M_full1_all_grads_errors.txt"):
         """
         Initialize class Structure.
 
