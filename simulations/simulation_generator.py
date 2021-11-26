@@ -14,6 +14,8 @@ from optimizers.py_optimizers import LeastSquaresSolver
 def save_plots(structure, optimizer, parameters_delta, path):
     model_twiss_table = structure.twiss_table_4D
     bad_twiss_table = structure.bad_twiss_table_4D
+    # model_twiss_table = structure.twiss_table_6D
+    # bad_twiss_table = structure.bad_twiss_table_6D
     try:
         corrected_twiss_table = structure.change_structure_for_correction(structure.bad_structure,
                                                                           optimizer.bad_elements_to_vary, -parameters_delta)
@@ -21,6 +23,9 @@ def save_plots(structure, optimizer, parameters_delta, path):
         plt.plot(model_twiss_table.s, corrected_twiss_table.betx, 'r', label='Corrected')
         plt.plot(model_twiss_table.s, model_twiss_table.betx, 'b', label='Model')
         plt.plot(model_twiss_table.s, bad_twiss_table.betx, linestyle='dashed', color='k', label='Real')
+        # plt.plot(model_twiss_table.s, corrected_twiss_table.beta11, 'r', label='Corrected')
+        # plt.plot(model_twiss_table.s,model_twiss_table.beta11, 'b', label='Model')
+        # plt.plot(model_twiss_table.s,bad_twiss_table.beta11,linestyle='dashed', color='k', label='Real')
         plt.legend()
         plt.xlabel('s, m')
         plt.ylabel('betx, m')
@@ -31,6 +36,9 @@ def save_plots(structure, optimizer, parameters_delta, path):
         plt.plot(model_twiss_table.s, corrected_twiss_table.bety, 'r', label='Corrected')
         plt.plot(model_twiss_table.s, model_twiss_table.bety, 'b', label='Model')
         plt.plot(model_twiss_table.s, bad_twiss_table.bety, linestyle='dashed', color='k', label='Real')
+        # plt.plot(model_twiss_table.s, corrected_twiss_table.beta22, 'r', label='Corrected')
+        # plt.plot(model_twiss_table.s,model_twiss_table.beta22, 'b', label='Model')
+        # plt.plot(model_twiss_table.s,bad_twiss_table.beta22,linestyle='dashed', color='k', label='Real')
         plt.legend()
         plt.xlabel('s, m')
         plt.ylabel('bety, m')
@@ -43,6 +51,9 @@ def save_plots(structure, optimizer, parameters_delta, path):
                  label='Corrected')
         plt.plot(model_twiss_table.s, (bad_twiss_table.betx - model_twiss_table.betx) / model_twiss_table.betx,
                  linestyle='dashed', color='k', label='Real')
+        # plt.plot(model_twiss_table.s,(corrected_twiss_table.beta11-model_twiss_table.beta11)/model_twiss_table.beta11, 'r', label='Corrected')
+        # plt.plot(model_twiss_table.s,(bad_twiss_table.beta11-model_twiss_table.beta11)/model_twiss_table.beta11,linestyle='dashed', color='k', label='Real')
+
         plt.legend()
         plt.xlabel('s, m')
         plt.ylabel('x beta-beating, m')
@@ -55,6 +66,9 @@ def save_plots(structure, optimizer, parameters_delta, path):
                  label='Corrected')
         plt.plot(model_twiss_table.s, (bad_twiss_table.bety - model_twiss_table.bety) / model_twiss_table.bety,
                  linestyle='dashed', color='k', label='Real')
+        # plt.plot(model_twiss_table.s,(corrected_twiss_table.beta22-model_twiss_table.beta22)/model_twiss_table.beta22, 'r', label='Corrected')
+        # plt.plot(model_twiss_table.s,(bad_twiss_table.beta22-model_twiss_table.beta22)/model_twiss_table.beta22,linestyle='dashed', color='k', label='Real')
+
         plt.legend()
         plt.xlabel('s, m')
         plt.ylabel('y beta-beating, m')
@@ -75,24 +89,25 @@ def make_simulation(output_dir, algorithm):
     erroneous_lattices = ["VEPP4M_full1_3_quads_errors.txt",
                           "VEPP4M_full1_combined_magnets_errors.txt",
                           "VEPP4M_full1_all_grads_errors.txt"]
-    erroneous_lattices = ["VEPP4M_full1_3_quads_errors.txt"]
+    erroneous_lattices = ["VEPP4M_full1_all_grads_errors.txt"]
     element_sets = ["combined_magnets.txt",
                     "elems.txt",
                     "quads.txt"]
-    element_sets = ["quads_test.txt"]
+    element_sets = ["elems.txt"]
     # grad_steps = [1e-3, 1e-4]
     grad_steps = [1e-3]
     # corrector_steps = [1e-3, 1e-4, 1e-5, 1e-6]
-    corrector_steps = [1e-5]
+    corrector_steps = [1e-6]
     matrix_forms = ["Coupled", "Uncoupled"]
-    # matrix_forms = ["Coupled"]
+    matrix_forms = ["Coupled"]
 
     if algorithm == "GaussNewton":
         optimizer = GaussNewton
         additional_parameters = [None]
     elif algorithm == "LevenbergMarquardt":
         optimizer = LevenbergMarquardt
-        additional_parameters = [1e-1, 1e-2, 1e-3, 1e-4]  # lambda param
+        # additional_parameters = [1e-1, 1e-2, 1e-3, 1e-4]  # lambda param
+        additional_parameters = [1e-3]
     else:
         optimizer = GaussNewtonConstrained
         additional_parameters = [1e-1, 1e-2, 1e-3, 1e-4]  # weigths
@@ -113,7 +128,7 @@ def make_simulation(output_dir, algorithm):
                                 structure = Structure(structure_file=root_lat + "/" + ideal_lattice,
                                                       bad_structure_file=root_lat + "/" + erroneous_lattice)
                                 solver = optimizer(structure, grad_step, corrector_step, 3,
-                                                   root_elem + "/" + element_set)
+                                                   root_elem + "/" + element_set, additional_parameter)
                                 parameters_delta, history = solver.optimize_lattice(matrix_form)
                                 end_time = datetime.now()
 
@@ -142,4 +157,8 @@ def make_simulation(output_dir, algorithm):
 
 if __name__ == "__main__":
     output_dir = Path("simulations/results") / str(datetime.now().strftime("%d_%m_%y-%H-%M-%S"))
-    make_simulation(output_dir, "GaussNewton")
+    # make_simulation(output_dir, "GaussNewton")
+    # algorithms = ["GaussNewton", "LevenbergMarquardt", "GaussNewtonConstrained"]
+    algorithms = ["LevenbergMarquardt"]
+    for algorithm in algorithms:
+        make_simulation(output_dir, algorithm)
