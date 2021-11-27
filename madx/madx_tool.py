@@ -234,7 +234,7 @@ class Structure():
 
         matrix = pd.concat(frames, axis=1)
         # print("Response Matrix:\n",matrix)
-        # matrix.to_csv('madx//response_matrix_quad_x.txt',index=False,header=False,sep="\t")
+        # matrix.to_csv('madx//response_matrix.csv',index=False,header=True,sep="\t")
         # print("resp:",datetime.now()-now)
         madx.quit()
         return matrix

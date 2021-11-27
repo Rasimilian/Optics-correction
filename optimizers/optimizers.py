@@ -25,6 +25,7 @@ class GaussNewton:
         self.shape = [22 * 108, self.elements_number]
         self.step = step
         self.iteration = iteration
+        self.names = [element[0] for element in self.elements_to_vary]
 
     def _get_residual(self,
                       bad_response_matrix: pd.DataFrame,
@@ -65,7 +66,7 @@ class GaussNewton:
         final_residual = 1000
         count = 1
         # while count <= self.iteration:
-        while final_residual > 1:
+        while final_residual > 10 and count <= 10:
             model_response_matrix_1 = self.structure.calculate_response_matrix(self.structure.structure,
                                                                                self.elements_to_vary,
                                                                                accumulative_param_additive,
@@ -73,10 +74,11 @@ class GaussNewton:
             vector_1, _ = self._get_residual(bad_response_matrix, model_response_matrix_1)
 
             J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1)
+            # jacob_to_write = pd.DataFrame(J, columns=self.names)
+            # jacob_to_write.to_csv(f"madx//jacobian_{count}.csv",index=False,header=True,sep="\t")
             u, sv, v = self.drop_bad_singular_values(J)
             delta = self.calculate_parameters_delta(J, u, sv, v, vector_1)
             accumulative_param_additive += delta
-            count += 1
 
             is_fitted = False
             k = 1
@@ -101,6 +103,7 @@ class GaussNewton:
             print("Final parameters: ", list(self.initial_parameters + accumulative_param_additive))
             print("Initial residual: ", initial_residual)
             print("Final residual: ", final_residual)
+            count += 1
 
         return accumulative_param_additive
 
