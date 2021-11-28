@@ -28,7 +28,7 @@ def save_plots(structure, optimizer, parameters_delta, path):
         # plt.plot(model_twiss_table.s,bad_twiss_table.beta11,linestyle='dashed', color='k', label='Real')
         plt.legend()
         plt.xlabel('s, m')
-        plt.ylabel('betx, m')
+        plt.ylabel(r'$\beta_x$, m')
         plt.savefig(path / "betx")
         plt.close()
 
@@ -41,7 +41,7 @@ def save_plots(structure, optimizer, parameters_delta, path):
         # plt.plot(model_twiss_table.s,bad_twiss_table.beta22,linestyle='dashed', color='k', label='Real')
         plt.legend()
         plt.xlabel('s, m')
-        plt.ylabel('bety, m')
+        plt.ylabel(r'$\beta_y$, m')
         plt.savefig(path / "bety")
         plt.close()
 
@@ -56,7 +56,7 @@ def save_plots(structure, optimizer, parameters_delta, path):
 
         plt.legend()
         plt.xlabel('s, m')
-        plt.ylabel('x beta-beating, m')
+        plt.ylabel(r'$\Delta\beta_x/\beta_x$, m')
         plt.savefig(path / "beating_betx")
         plt.close()
 
@@ -71,7 +71,7 @@ def save_plots(structure, optimizer, parameters_delta, path):
 
         plt.legend()
         plt.xlabel('s, m')
-        plt.ylabel('y beta-beating, m')
+        plt.ylabel(r'$\Delta\beta_y/\beta_y$, m')
         plt.savefig(path / "beating_bety")
         plt.close()
     except TwissFailed:
@@ -106,8 +106,8 @@ def make_simulation(output_dir, algorithm):
         additional_parameters = [None]
     elif algorithm == "LevenbergMarquardt":
         optimizer = LevenbergMarquardt
-        # additional_parameters = [1e-1, 1e-2, 1e-3, 1e-4]  # lambda param
-        additional_parameters = [1e-3]
+        additional_parameters = [1e-1, 1e-2, 1e-3, 1e-4]  # lambda param
+        # additional_parameters = [1e-3]
     else:
         optimizer = GaussNewtonConstrained
         additional_parameters = [1e-1, 1e-2, 1e-3, 1e-4]  # weigths

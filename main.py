@@ -49,7 +49,7 @@ plt.plot(model_twiss_table.s,bad_twiss_table.betx,linestyle='dashed', color='k',
 # plt.plot(model_twiss_table.s,bad_twiss_table.beta11,linestyle='dashed', color='k', label='Real')
 plt.legend()
 plt.xlabel('s, m')
-plt.ylabel('betx, m')
+plt.ylabel(r'$\beta_x$, m')
 plt.show()
 
 plt.plot(model_twiss_table.s,corrected_twiss_table.bety, 'r', label='Corrected')
@@ -59,7 +59,7 @@ plt.plot(model_twiss_table.s,bad_twiss_table.bety,linestyle='dashed', color='k',
 # plt.plot(model_twiss_table.s,bad_twiss_table.beta22,linestyle='dashed', color='k', label='Real')
 plt.legend()
 plt.xlabel('s, m')
-plt.ylabel('bety, m')
+plt.ylabel(r'$\beta_x$, m')
 plt.show()
 
 # plt.plot(model_twiss_table.s,model_twiss_table.betx, 'b', label='Model')
@@ -69,7 +69,7 @@ plt.plot(model_twiss_table.s,(bad_twiss_table.betx-model_twiss_table.betx)/model
 # plt.plot(model_twiss_table.s,(bad_twiss_table.beta11-model_twiss_table.beta11)/model_twiss_table.beta11,linestyle='dashed', color='k', label='Real')
 plt.legend()
 plt.xlabel('s, m')
-plt.ylabel('x beta-beating, m')
+plt.ylabel(r'$\Delta\beta_x/\beta_x$, m')
 plt.show()
 
 # plt.plot(model_twiss_table.s,model_twiss_table.betx, 'b', label='Model')
@@ -79,7 +79,7 @@ plt.plot(model_twiss_table.s,(bad_twiss_table.bety-model_twiss_table.bety)/model
 # plt.plot(model_twiss_table.s,(bad_twiss_table.beta22-model_twiss_table.beta22)/model_twiss_table.beta22,linestyle='dashed', color='k', label='Real')
 plt.legend()
 plt.xlabel('s, m')
-plt.ylabel('y beta-beating, m')
+plt.ylabel(r'$\Delta\beta_y/\beta_y$, m')
 plt.show()
 
 print('errors in STL1 0.24157, SIL1 0.94011966, SIL2 -0.8832828')
