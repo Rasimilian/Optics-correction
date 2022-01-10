@@ -2,12 +2,62 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+from tqdm import tqdm
 from typing import List, Optional, Union, Tuple
+import multiprocessing as mp
+import ctypes
 
 from cpymad.madx import Madx, TwissFailed
 from madx.madx_tool import Structure
 from element_parser.data_parser import describe_elements, describe_correctors, match_elements_indices_of_two_structures
+from parallelizer.jacobian_parallelizing import parallelize
 
+
+# def add_worker_process(calc_jacob, accumulative_param_additive, model_response_matrix, queue, shape, arrD):
+#     J = np.reshape(np.frombuffer(arrD), shape)
+#
+#     while True:
+#         # job is an array of params portion (indices of params)
+#         job = queue.get()
+#         if job == None:
+#             break
+#
+#         J[:, job] = calc_jacob(accumulative_param_additive, model_response_matrix, job)
+#
+#         queue.task_done()
+#     queue.task_done()
+#
+#
+# def parallelize(calc_jacob, accumulative_param_additive, model_response_matrix, shape):
+#     arrD = mp.RawArray(ctypes.c_double, shape[0] * shape[1])
+#
+#     # setup jobs
+#     # nCPU = mp.cpu_count()
+#     nCPU = 2
+#     nJobs = nCPU * 5
+#
+#     params_in_job = int(len(accumulative_param_additive) / nJobs)
+#     param_portions = np.array_split(accumulative_param_additive, params_in_job)
+#
+#     queue = mp.JoinableQueue()
+#     for param_portion in param_portions:
+#         queue.put(param_portion)
+#     for i in range(nCPU):
+#         queue.put(None)
+#
+#     # run workers
+#     workers = []
+#     for i in range(nCPU):
+#         worker = mp.Process(target=add_worker_process,
+#                             args=(calc_jacob, accumulative_param_additive, model_response_matrix, queue, shape, arrD))
+#         workers.append(worker)
+#         worker.start()
+#
+#     queue.join()
+#
+#     # make array from shared memory
+#     J = np.reshape(np.frombuffer(arrD), shape)
+#     return J
 
 class GaussNewton:
     def __init__(self, structure: Structure, step: float, iteration: int = 2):
@@ -65,15 +115,18 @@ class GaussNewton:
 
         final_residual = 1000
         count = 1
-        # while count <= self.iteration:
-        while final_residual > 10 and count <= 10:
+        while count <= self.iteration:
+        # while final_residual > 10 and count <= 1:
             model_response_matrix_1 = self.structure.calculate_response_matrix(self.structure.structure,
                                                                                self.elements_to_vary,
                                                                                accumulative_param_additive,
                                                                                self.correctors)
             vector_1, _ = self._get_residual(bad_response_matrix, model_response_matrix_1)
 
-            J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1)
+            # J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1)
+            J = parallelize(GaussNewton.calculate_jacobian1, model_response_matrix_1, accumulative_param_additive,
+                            self.shape, "madx\structures\VEPP4M_full1.txt", self.step, self.elements_to_vary, self.correctors)
+
             # jacob_to_write = pd.DataFrame(J, columns=self.names)
             # jacob_to_write.to_csv(f"madx//jacobian_{count}.csv",index=False,header=True,sep="\t")
             u, sv, v = self.drop_bad_singular_values(J)
@@ -90,7 +143,8 @@ class GaussNewton:
                                                                                             self.correctors)
                     is_fitted = True
                 except TwissFailed:
-                    accumulative_param_additive = np.where(np.abs(accumulative_param_additive) < k, accumulative_param_additive, 0)
+                    accumulative_param_additive = np.where(np.abs(accumulative_param_additive) < k,
+                                                           accumulative_param_additive, 0)
                     k /= 2
                     print("deltas reduced")
                     print(k)
@@ -117,9 +171,10 @@ class GaussNewton:
         :return: Jacobian
         """
         J = np.zeros(self.shape)
-        for i in range(self.elements_number):
-            now = datetime.now()
-            print('Calc Jacob ', str(i) + '/' + str(self.elements_number))
+        for i in tqdm(range(self.elements_number)):
+            # now = datetime.now()
+            # print('Calc Jacob ', str(i) + '/' + str(self.elements_number))
+            # TODO remove variation using additive.copy()
             accumulative_param_variation = np.zeros(self.elements_number)
             accumulative_param_variation[i] = self.step
             accumulative_param_variation += accumulative_param_additive
@@ -131,9 +186,43 @@ class GaussNewton:
             vector_2, _ = self._get_residual(model_response_matrix_1, model_response_matrix_2)
 
             J[:, i] = vector_2 / self.step
-            print(datetime.now() - now)
+            # print(datetime.now() - now)
 
         return J
+
+    @staticmethod
+    def calculate_jacobian1(accumulative_param_additive: np.ndarray,
+                            model_response_matrix_1: pd.DataFrame,
+                            indices: np.ndarray,
+                            structure,
+                            step,
+                            elements_to_vary,
+                            correctors) -> np.ndarray:
+        """
+        Function to calculate Jacobian.
+
+        :param accumulative_param_additive: parameters deltas from last iteration
+        :param model_response_matrix_1: interim response matrix
+        :return: Jacobian
+        """
+        J = []
+        for i in tqdm(indices):
+            # now = datetime.now()
+            # print('Calc Jacob ', str(i) + '/' + str(self.elements_number))
+            accumulative_param_variation = accumulative_param_additive.copy()
+            accumulative_param_variation[i] += step
+
+            model_response_matrix_2 = Structure.calculate_response_matrix(structure,
+                                                                          elements_to_vary,
+                                                                          accumulative_param_variation,
+                                                                          correctors)
+            # vector_2, _ = get_residual(model_response_matrix_1, model_response_matrix_2)
+            vector_2 = (model_response_matrix_1 - model_response_matrix_2).to_numpy().flatten()
+
+            J.append(vector_2 / step)
+            # print(datetime.now() - now)
+
+        return np.array(J).T
 
     def drop_bad_singular_values(self, J: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -207,7 +296,7 @@ class GaussNewton:
 
 
 class LevenbergMarquardt(GaussNewton):
-    def __init__(self, structure: Structure, step: float, iteration: int = 2, coefficient_lambda: float = 0.001):
+    def __init__(self, structure: Structure, step: float, iteration: int = 3, coefficient_lambda: float = 0.001):
         super().__init__(structure, step, iteration)
         self.coefficient_lambda = coefficient_lambda
 

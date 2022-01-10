@@ -86,8 +86,8 @@ class Structure():
 
         return twiss_table
 
-    def make_kick_by_corrector(self,
-                               corrector: Tuple[str, int, float],
+    @staticmethod
+    def make_kick_by_corrector(corrector: Tuple[str, int, float],
                                madx: Madx,
                                kick_step: float) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -103,16 +103,18 @@ class Structure():
         # now = datetime.now()
         madx.elements[corrector[1]].kick = corrector[2] + kick_step
 
-        # madx.input('select,flag=twiss,class=monitor;')
+        madx.input('select,flag=twiss,class=monitor;')
         # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=2,nst=1;')
         # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=6,nst=10,exact=true;')
         # madx.ptc_twiss(icase=6,no=1,center_magnets=True,closed_orbit=True,table='twiss', file="madx\\log_file.txt")
 
         madx.twiss(sequence='RING', centre=True, table='twiss', file="madx\\log_file.txt")
         # madx.input('twiss,sequence=RING, centre=True, table=twiss, file=madx\\log_file.txt;')
-        madx.input('readtable,file="madx\\log_file.txt",table=twiss_in_bpms;')
-
-        twiss_table = madx.table.twiss_in_bpms.x, madx.table.twiss_in_bpms.y
+        ## TODO dont read
+        # madx.input('readtable,file="madx\\log_file.txt",table=twiss_in_bpms;')
+        # print(len(madx.table.twiss.selection().x))
+        # breakpoint()
+        twiss_table = madx.table.twiss.selection().x, madx.table.twiss.selection().y
         # print(twiss_table[0])
         madx.elements[corrector[1]].kick = corrector[2]
         # print(datetime.now()-now)
@@ -178,8 +180,8 @@ class Structure():
 
         return twiss_table
 
-    def calculate_response_matrix(self,
-                                  structure: str,
+    @staticmethod
+    def calculate_response_matrix(structure: str,
                                   elements_to_vary: List[Tuple[str, int, float]],
                                   accumulative_param_additive: np.ndarray,
                                   correctors: List[Tuple[str, int, float]],
@@ -210,11 +212,11 @@ class Structure():
             madx.elements[element[1]].k1 = element[2] + accumulative_param_additive_[num]
 
         frames = []
-        twiss_in_BPMs = self.make_kick_by_corrector(correctors[0], madx, kick_step=0)
+        twiss_in_BPMs = Structure.make_kick_by_corrector(correctors[0], madx, kick_step=0)
         for corrector in correctors:
             ## Jacobian = (f(x+dx)-f(x))/dx
             ## For f(x+dx)
-            twiss_in_BPMs_1 = self.make_kick_by_corrector(corrector, madx, corrector_step)
+            twiss_in_BPMs_1 = Structure.make_kick_by_corrector(corrector, madx, corrector_step)
 
             ## For f(x)
             # twiss_in_BPMs = self.measure_response(self.structure, self.structure_in_lines, element, variation_step[0],
