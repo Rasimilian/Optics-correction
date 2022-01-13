@@ -13,52 +13,6 @@ from element_parser.data_parser import describe_elements, describe_correctors, m
 from parallelizer.jacobian_parallelizing import parallelize
 
 
-# def add_worker_process(calc_jacob, accumulative_param_additive, model_response_matrix, queue, shape, arrD):
-#     J = np.reshape(np.frombuffer(arrD), shape)
-#
-#     while True:
-#         # job is an array of params portion (indices of params)
-#         job = queue.get()
-#         if job == None:
-#             break
-#
-#         J[:, job] = calc_jacob(accumulative_param_additive, model_response_matrix, job)
-#
-#         queue.task_done()
-#     queue.task_done()
-#
-#
-# def parallelize(calc_jacob, accumulative_param_additive, model_response_matrix, shape):
-#     arrD = mp.RawArray(ctypes.c_double, shape[0] * shape[1])
-#
-#     # setup jobs
-#     # nCPU = mp.cpu_count()
-#     nCPU = 2
-#     nJobs = nCPU * 5
-#
-#     params_in_job = int(len(accumulative_param_additive) / nJobs)
-#     param_portions = np.array_split(accumulative_param_additive, params_in_job)
-#
-#     queue = mp.JoinableQueue()
-#     for param_portion in param_portions:
-#         queue.put(param_portion)
-#     for i in range(nCPU):
-#         queue.put(None)
-#
-#     # run workers
-#     workers = []
-#     for i in range(nCPU):
-#         worker = mp.Process(target=add_worker_process,
-#                             args=(calc_jacob, accumulative_param_additive, model_response_matrix, queue, shape, arrD))
-#         workers.append(worker)
-#         worker.start()
-#
-#     queue.join()
-#
-#     # make array from shared memory
-#     J = np.reshape(np.frombuffer(arrD), shape)
-#     return J
-
 class GaussNewton:
     def __init__(self, structure: Structure, step: float, iteration: int = 2):
         self.structure = structure
@@ -124,7 +78,7 @@ class GaussNewton:
             vector_1, _ = self._get_residual(bad_response_matrix, model_response_matrix_1)
 
             # J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1)
-            J = parallelize(GaussNewton.calculate_jacobian1, model_response_matrix_1, accumulative_param_additive,
+            J = parallelize(GaussNewton.calculate_jacobian_in_parallel, model_response_matrix_1, accumulative_param_additive,
                             self.shape, "madx\structures\VEPP4M_full1.txt", self.step, self.elements_to_vary, self.correctors)
 
             # jacob_to_write = pd.DataFrame(J, columns=self.names)
@@ -146,8 +100,7 @@ class GaussNewton:
                     accumulative_param_additive = np.where(np.abs(accumulative_param_additive) < k,
                                                            accumulative_param_additive, 0)
                     k /= 2
-                    print("deltas reduced")
-                    print(k)
+                    print(f"deltas reduced by {k}")
                     print(accumulative_param_additive)
             final_vector, final_residual = self._get_residual(bad_response_matrix, fitted_model_response_matrix)
 
@@ -173,7 +126,6 @@ class GaussNewton:
         J = np.zeros(self.shape)
         for i in tqdm(range(self.elements_number)):
             # now = datetime.now()
-            # print('Calc Jacob ', str(i) + '/' + str(self.elements_number))
             # TODO remove variation using additive.copy()
             accumulative_param_variation = np.zeros(self.elements_number)
             accumulative_param_variation[i] = self.step
@@ -191,13 +143,13 @@ class GaussNewton:
         return J
 
     @staticmethod
-    def calculate_jacobian1(accumulative_param_additive: np.ndarray,
-                            model_response_matrix_1: pd.DataFrame,
-                            indices: np.ndarray,
-                            structure,
-                            step,
-                            elements_to_vary,
-                            correctors) -> np.ndarray:
+    def calculate_jacobian_in_parallel(accumulative_param_additive: np.ndarray,
+                                       model_response_matrix_1: pd.DataFrame,
+                                       indices: np.ndarray,
+                                       structure,
+                                       step,
+                                       elements_to_vary,
+                                       correctors) -> np.ndarray:
         """
         Function to calculate Jacobian.
 
@@ -208,7 +160,6 @@ class GaussNewton:
         J = []
         for i in tqdm(indices):
             # now = datetime.now()
-            # print('Calc Jacob ', str(i) + '/' + str(self.elements_number))
             accumulative_param_variation = accumulative_param_additive.copy()
             accumulative_param_variation[i] += step
 
@@ -261,7 +212,6 @@ class GaussNewton:
         J_new = np.matmul(np.matmul(v.T, sv), u.T)
         # delta = -np.matmul(np.linalg.pinv(np.matmul(J.T,J)),J.T).dot(vector_1)
         delta = -np.matmul(J_new, J.T).dot(vector_1)
-        # delta = np.where(np.abs(delta)>1e-3, 0.5*delta, delta) # To remove twiss instabillity
         print("delta", delta)
 
         return delta

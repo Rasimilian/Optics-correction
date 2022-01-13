@@ -109,13 +109,8 @@ class Structure():
         # madx.ptc_twiss(icase=6,no=1,center_magnets=True,closed_orbit=True,table='twiss', file="madx\\log_file.txt")
 
         madx.twiss(sequence='RING', centre=True, table='twiss', file="madx\\log_file.txt")
-        # madx.input('twiss,sequence=RING, centre=True, table=twiss, file=madx\\log_file.txt;')
-        ## TODO dont read
-        # madx.input('readtable,file="madx\\log_file.txt",table=twiss_in_bpms;')
-        # print(len(madx.table.twiss.selection().x))
-        # breakpoint()
         twiss_table = madx.table.twiss.selection().x, madx.table.twiss.selection().y
-        # print(twiss_table[0])
+
         madx.elements[corrector[1]].kick = corrector[2]
         # print(datetime.now()-now)
         return twiss_table
@@ -207,23 +202,17 @@ class Structure():
         madx.input('use,sequence=RING;')
         madx.input('select,flag=twiss,class=monitor;')
 
-        accumulative_param_additive_ = accumulative_param_additive
+        accumulative_param_additive_ = accumulative_param_additive.copy()
         for num, element in enumerate(elements_to_vary):
             madx.elements[element[1]].k1 = element[2] + accumulative_param_additive_[num]
 
         frames = []
+        ## Jacobian = (f(x+dx)-f(x))/dx
+        ## For f(x)
         twiss_in_BPMs = Structure.make_kick_by_corrector(correctors[0], madx, kick_step=0)
         for corrector in correctors:
-            ## Jacobian = (f(x+dx)-f(x))/dx
             ## For f(x+dx)
             twiss_in_BPMs_1 = Structure.make_kick_by_corrector(corrector, madx, corrector_step)
-
-            ## For f(x)
-            # twiss_in_BPMs = self.measure_response(self.structure, self.structure_in_lines, element, variation_step[0],
-            #                                     accumulative_param_additive[n])
-            # print(len(twiss_in_BPMs))
-            # print(len(twiss_in_BPMs_1))
-            # assert len(twiss_in_BPMs_1) != len(twiss_in_BPMs)
 
             df_x = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0]) / corrector_step, columns=[corrector[0]])
             df_y = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1]) / corrector_step, columns=[corrector[0]])
