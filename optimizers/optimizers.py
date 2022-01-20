@@ -14,20 +14,21 @@ from parallelizer.jacobian_parallelizing import parallelize
 
 
 class GaussNewton:
-    def __init__(self, structure: Structure, step: float, iteration: int = 2):
+    def __init__(self, structure: Structure, correctors="madx/correctors/correctors.txt",
+                 elements_to_vary="madx/elements/elems.txt", corrector_step = 1e-6, grad_step: float = 1e-3, iteration: int = 2):
         self.structure = structure
         self.elements_to_vary, self.initial_parameters = describe_elements(self.structure.structure,
-                                                                           "madx\elements\elems.txt")
-        self.correctors, _ = describe_correctors(self.structure.structure, "madx\correctors\correctors.txt")
-        self.bad_correctors, _ = describe_correctors(self.structure.bad_structure, "madx\correctors\correctors.txt")
+                                                                           elements_to_vary)
+        self.correctors, _ = describe_correctors(self.structure.structure, correctors)
+        self.bad_correctors, _ = describe_correctors(self.structure.bad_structure, correctors)
         self.bad_elements_to_vary, self.bad_initial_parameters = describe_elements(self.structure.bad_structure,
-                                                                                   "madx\elements\elems.txt")
+                                                                                   elements_to_vary)
         self.bad_elements_to_vary, self.bad_initial_parameters = match_elements_indices_of_two_structures(
             self.elements_to_vary, self.initial_parameters, self.bad_elements_to_vary, self.bad_initial_parameters)
         self.elements_number = len(self.elements_to_vary)
         # self.shape = [22, self.elements_number]
         self.shape = [22 * 108, self.elements_number]
-        self.step = step
+        self.grad_step = grad_step
         self.iteration = iteration
         self.names = [element[0] for element in self.elements_to_vary]
 
@@ -70,7 +71,7 @@ class GaussNewton:
         final_residual = 1000
         count = 1
         while count <= self.iteration:
-        # while final_residual > 10 and count <= 1:
+            # while final_residual > 10 and count <= 1:
             model_response_matrix_1 = self.structure.calculate_response_matrix(self.structure.structure,
                                                                                self.elements_to_vary,
                                                                                accumulative_param_additive,
@@ -78,8 +79,10 @@ class GaussNewton:
             vector_1, _ = self._get_residual(bad_response_matrix, model_response_matrix_1)
 
             # J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1)
-            J = parallelize(GaussNewton.calculate_jacobian_in_parallel, model_response_matrix_1, accumulative_param_additive,
-                            self.shape, "madx\structures\VEPP4M_full1.txt", self.step, self.elements_to_vary, self.correctors)
+            J = parallelize(GaussNewton.calculate_jacobian_in_parallel, model_response_matrix_1,
+                            accumulative_param_additive,
+                            self.shape, "madx/structures/VEPP4M_full1.txt", self.grad_step, self.elements_to_vary,
+                            self.correctors)
 
             # jacob_to_write = pd.DataFrame(J, columns=self.names)
             # jacob_to_write.to_csv(f"madx//jacobian_{count}.csv",index=False,header=True,sep="\t")
@@ -112,7 +115,7 @@ class GaussNewton:
             print("Final residual: ", final_residual)
             count += 1
 
-        return accumulative_param_additive
+        return accumulative_param_additive, initial_residual, final_residual
 
     def calculate_jacobian(self, accumulative_param_additive: np.ndarray,
                            model_response_matrix_1: pd.DataFrame) -> np.ndarray:
@@ -128,7 +131,7 @@ class GaussNewton:
             # now = datetime.now()
             # TODO remove variation using additive.copy()
             accumulative_param_variation = np.zeros(self.elements_number)
-            accumulative_param_variation[i] = self.step
+            accumulative_param_variation[i] = self.grad_step
             accumulative_param_variation += accumulative_param_additive
 
             model_response_matrix_2 = self.structure.calculate_response_matrix(self.structure.structure,
@@ -137,7 +140,7 @@ class GaussNewton:
                                                                                self.correctors)
             vector_2, _ = self._get_residual(model_response_matrix_1, model_response_matrix_2)
 
-            J[:, i] = vector_2 / self.step
+            J[:, i] = vector_2 / self.grad_step
             # print(datetime.now() - now)
 
         return J
@@ -147,7 +150,7 @@ class GaussNewton:
                                        model_response_matrix_1: pd.DataFrame,
                                        indices: np.ndarray,
                                        structure,
-                                       step,
+                                       grad_step,
                                        elements_to_vary,
                                        correctors) -> np.ndarray:
         """
@@ -161,16 +164,16 @@ class GaussNewton:
         for i in tqdm(indices):
             # now = datetime.now()
             accumulative_param_variation = accumulative_param_additive.copy()
-            accumulative_param_variation[i] += step
+            accumulative_param_variation[i] += grad_step
 
             model_response_matrix_2 = Structure.calculate_response_matrix(structure,
                                                                           elements_to_vary,
                                                                           accumulative_param_variation,
                                                                           correctors)
-            # vector_2, _ = get_residual(model_response_matrix_1, model_response_matrix_2)
+
             vector_2 = (model_response_matrix_1 - model_response_matrix_2).to_numpy().flatten()
 
-            J.append(vector_2 / step)
+            J.append(vector_2 / grad_step)
             # print(datetime.now() - now)
 
         return np.array(J).T
@@ -246,8 +249,9 @@ class GaussNewton:
 
 
 class LevenbergMarquardt(GaussNewton):
-    def __init__(self, structure: Structure, step: float, iteration: int = 3, coefficient_lambda: float = 0.001):
-        super().__init__(structure, step, iteration)
+    def __init__(self, structure: Structure, correctors, elements_to_vary, corrector_step, grad_step: float, iteration: int = 3,
+                 coefficient_lambda: float = 0.001):
+        super().__init__(structure, correctors, elements_to_vary, corrector_step, grad_step, iteration)
         self.coefficient_lambda = coefficient_lambda
 
     def drop_bad_singular_values(self, J: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -279,8 +283,8 @@ class LevenbergMarquardt(GaussNewton):
 
 
 class GaussNewtonConstrained(GaussNewton):
-    def __init__(self, structure: Structure, step: float, iteration: int = 1):
-        super().__init__(structure, step, iteration)
+    def __init__(self, structure: Structure, correctors, element_to_vary, corrector_step, grad_step: float, iteration: int = 1):
+        super().__init__(structure, correctors, element_to_vary, corrector_step, grad_step, iteration)
         self.weights = np.ones(self.elements_number) * 1e-3
         self.weights = np.random.rand(self.elements_number) * 1e-4
 

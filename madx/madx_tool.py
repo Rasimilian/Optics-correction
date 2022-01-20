@@ -10,8 +10,8 @@ from element_parser.data_parser import read_elements_from_file, describe_element
 
 class Structure():
     def __init__(self,
-                 structure_file: str = "madx\structures\VEPP4M_full1.txt",
-                 bad_structure_file: str = "madx\structures\VEPP4M_full1_all_grads_errors.txt"):
+                 structure_file: str = "madx/structures/VEPP4M_full1.txt",
+                 bad_structure_file: str = "madx/structures/VEPP4M_full1_all_grads_errors.txt"):
         """
         Initialize class Structure.
 
@@ -27,9 +27,9 @@ class Structure():
         # self.elements_number = len(describe_elements(self.structure_in_lines)[0])
 
         self.twiss_table_4D = self.calculate_structure_4D(self.structure)
-        self.twiss_table_6D = self.calculate_structure_6D(self.structure)
+        # self.twiss_table_6D = self.calculate_structure_6D(self.structure)
         self.bad_twiss_table_4D = self.calculate_structure_4D(self.bad_structure)
-        self.bad_twiss_table_6D = self.calculate_structure_6D(self.bad_structure)
+        # self.bad_twiss_table_6D = self.calculate_structure_6D(self.bad_structure)
 
     def calculate_structure_4D(self, structure: str, initial_imperfections=None) -> Madx.twiss:
         """
@@ -50,9 +50,8 @@ class Structure():
 
         # madx.input('select,flag=twiss,class=monitor;')
 
-        madx.twiss(sequence='RING', centre=True, table='twiss', file="madx\\log_file.txt")
-        madx.input('readtable,file="madx\\log_file.txt",table=twiss_in_BPMs;')
-        twiss_table = madx.table.twiss_in_BPMs
+        madx.twiss(sequence='RING', centre=True)
+        twiss_table = madx.table.twiss
         # madx.quit()
 
         return twiss_table
@@ -78,10 +77,8 @@ class Structure():
         madx.input('ptc_create_universe;ptc_create_layout,model=2,method=2,nst=1;')
         # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=6,nst=10,exact=true;')
 
-        madx.ptc_twiss(icase=6, no=1, center_magnets=True, closed_orbit=True, table='twiss', file="madx\\log_file.txt")
-        madx.input('readtable,file="madx\\log_file.txt",table=twiss_in_BPMs;')
-
-        twiss_table = madx.table.twiss_in_BPMs
+        madx.ptc_twiss(icase=6, no=1, center_magnets=True, closed_orbit=True, table='twiss')
+        twiss_table = madx.table.twiss
         # madx.quit()
 
         return twiss_table
@@ -108,7 +105,7 @@ class Structure():
         # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=6,nst=10,exact=true;')
         # madx.ptc_twiss(icase=6,no=1,center_magnets=True,closed_orbit=True,table='twiss', file="madx\\log_file.txt")
 
-        madx.twiss(sequence='RING', centre=True, table='twiss', file="madx\\log_file.txt")
+        madx.twiss(sequence='RING', centre=True)
         twiss_table = madx.table.twiss.selection().x, madx.table.twiss.selection().y
 
         madx.elements[corrector[1]].kick = corrector[2]
@@ -125,14 +122,11 @@ class Structure():
         madx.input('ptc_create_universe;ptc_create_layout,model=2,method=2,nst=1;')
         # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=6,nst=10,exact=true;')
 
-        madx.ptc_twiss(icase=6, no=1, center_magnets=True, closed_orbit=True, table='twiss',
-                       file="madx\\log_file.txt", )
+        madx.ptc_twiss(icase=6, no=1, center_magnets=True, closed_orbit=True, table='twiss')
 
-        # madx.twiss(sequence='RING', centre=True, table='twiss', file="madx\\log_file.txt")
-        # madx.input('twiss,sequence=RING, centre=True, table=twiss, file=madx\\log_file.txt;')
-        madx.input('readtable,file="madx\\log_file.txt",table=twiss_in_bpms;')
+        # madx.twiss(sequence='RING', centre=True)
 
-        twiss_table = madx.table.twiss_in_bpms.x, madx.table.twiss_in_bpms.y
+        twiss_table = madx.table.twiss.selection().x, madx.table.twiss.selection().y
         madx.elements[quadrupole[1]].k1 = quadrupole[2]
 
         return twiss_table
@@ -166,11 +160,9 @@ class Structure():
 
         # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=2,nst=1;')
         # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=6,nst=10,exact=true;')
-        # madx.ptc_twiss(icase=6,no=1,center_magnets=True,closed_orbit=True,table='twiss', file="madx\\log_file.txt",)
-        madx.twiss(sequence='RING', centre=True, table='twiss', file="madx\\log_file.txt")
-        madx.input('readtable,file="madx\\log_file.txt",table=twiss_in_BPMs;')
-
-        twiss_table = madx.table.twiss_in_BPMs
+        # madx.ptc_twiss(icase=6,no=1,center_magnets=True,closed_orbit=True,table='twiss')
+        madx.twiss(sequence='RING', centre=True)
+        twiss_table = madx.table.twiss
         # madx.quit()
 
         return twiss_table
@@ -310,8 +302,8 @@ class Structure():
         # madx.ptc_twiss(icase=6,no=1,center_magnets=True,closed_orbit=True,table='twiss', file="madx\\log_file.txt",)
 
         # madx.twiss(sequence='RING', centre=True, table='twiss', file="madx\\log_file.txt")
-        madx.input('twiss,sequence=RING, centre=False, table=twiss, file=madx\\log_file.txt;')
-        madx.input('readtable,file="madx\\log_file.txt",table=twiss_in_bpms;')
+        madx.input('twiss,sequence=RING, centre=False, table=twiss, file=madx/log_file.txt;')
+        madx.input('readtable,file="madx/log_file.txt",table=twiss_in_bpms;')
 
         return madx.table.twiss_in_bpms.x, madx.table.twiss_in_bpms.y
 
@@ -356,7 +348,7 @@ class Structure():
             madx.input('ealign,dx:=' + str(error_magnitude) + '*gauss(),dy:=' + str(error_magnitude) + '*gauss();')
             madx.input('select,flag=error,clear;')
 
-        madx.input('esave,file="madx\machine_imperfections";')
+        madx.input('esave,file="madx/machine_imperfections";')
         # madx.input('select,flag=myerrortable, class=quadrupole;')
         madx.input('etable,table=errors_table;')
 

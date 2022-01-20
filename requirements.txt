@@ -1,4 +1,7 @@
-cpymad==1.6.0
+cpymad==1.9.0
 numpy
 matplotlib
 pandas
+pytest
+tqdm
+scipy
