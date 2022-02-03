@@ -13,19 +13,20 @@ if __name__ == "__main__":
 
     now = datetime.now()
     # optimizer = GaussNewton(structure, step=1e-3)
-    optimizer = LevenbergMarquardt(structure, "madx/correctors/correctors.txt", "madx/elements/elems.txt", 1e-6, grad_step=1e-3)
+    optimizer = LevenbergMarquardt(structure, "madx/correctors/correctors.txt", "madx/elements/quads_test.txt", 1e-6, grad_step=1e-3)
     # optimizer = GaussNewtonConstrained(structure, step=3e-3)
 
-    parameters_delta, _, _ = optimizer.optimize_lattice()
+    parameters_delta, _, _, alignments_delta = optimizer.optimize_lattice()
     # parameters_delta = optimizer.optimize_orbit()
     print(parameters_delta)
+    print(alignments_delta)
     print(datetime.now()-now)
 
     model_twiss_table = structure.twiss_table_4D
     bad_twiss_table = structure.bad_twiss_table_4D
     # model_twiss_table = structure.twiss_table_6D
     # bad_twiss_table = structure.bad_twiss_table_6D
-    corrected_twiss_table = structure.change_structure_for_correction(structure.bad_structure, optimizer.bad_elements_to_vary, -parameters_delta)
+    corrected_twiss_table = structure.change_structure_for_correction(structure.bad_structure, optimizer.bad_elements_to_vary, -parameters_delta, alignments_delta, optimizer.names)
 
     plt.plot(model_twiss_table.s,corrected_twiss_table.betx, 'r', label='Corrected')
     plt.plot(model_twiss_table.s,model_twiss_table.betx, 'b', label='Model')

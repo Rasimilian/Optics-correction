@@ -11,7 +11,7 @@ from element_parser.data_parser import read_elements_from_file, describe_element
 class Structure():
     def __init__(self,
                  structure_file: str = "madx/structures/VEPP4M_full1.txt",
-                 bad_structure_file: str = "madx/structures/VEPP4M_full1_all_grads_errors.txt"):
+                 bad_structure_file: str = "madx/structures/VEPP4M_full1.txt"):
         """
         Initialize class Structure.
 
@@ -28,7 +28,7 @@ class Structure():
 
         self.twiss_table_4D = self.calculate_structure_4D(self.structure)
         # self.twiss_table_6D = self.calculate_structure_6D(self.structure)
-        self.bad_twiss_table_4D = self.calculate_structure_4D(self.bad_structure)
+        self.bad_twiss_table_4D = self.calculate_structure_4D(self.bad_structure, True)
         # self.bad_twiss_table_6D = self.calculate_structure_6D(self.bad_structure)
 
     def calculate_structure_4D(self, structure: str, initial_imperfections=None) -> Madx.twiss:
@@ -46,7 +46,15 @@ class Structure():
         madx.input('use,sequence=RING;')
 
         # TODO add errors
-        # self.errors_table = self.add_errors_to_structure(madx, 'quadrupole', value=0.000001, initial_imperfections=initial_imperfections)
+        if initial_imperfections:
+            # quads = ['stl1', 'stl2', 'stl3', 'stl4', 'sil1', 'sil2', 'sil3', 'sil4', 'sel5', 'sel4', 'sel3', 'sel2', 'sel1', 'nel1', 'nel2', 'nel3', 'nel4', 'nel5', 'nil4', 'nil3', 'nil2', 'nil1', 'ntl4', 'ntl3', 'ntl2', 'ntl1']
+            quads = ['STL1', 'SIL1', 'SIL2']
+            dx_error = np.zeros(len(quads))
+            dy_error = np.zeros(len(quads))
+            dx_error[2] = 2e-5
+            dy_error[1] = 1e-5
+            self.initial_errors_table = Structure.add_alignment_errors_to_structure(madx, quads, {'dx': dx_error, 'dy': dy_error})
+            print(self.initial_errors_table)
 
         # madx.input('select,flag=twiss,class=monitor;')
 
@@ -134,7 +142,9 @@ class Structure():
     def change_structure_for_correction(self,
                                         structure: str,
                                         elements_to_vary: List[Tuple[str, int, float]],
-                                        accumulative_param_additive: np.ndarray) -> Madx.twiss:
+                                        accumulative_param_additive: np.ndarray,
+                                        accumulative_alignment_additive,
+                                        elements_for_aligns) -> Madx.twiss:
         """
         Change elements parameters in structure for correction. All locations are involved.
 
@@ -156,6 +166,10 @@ class Structure():
         for num, element in enumerate(elements_to_vary):
             madx.elements[element[1]].k1 = element[2] + accumulative_param_additive_[num]
 
+        for param in accumulative_alignment_additive:
+            accumulative_alignment_additive[param] = -accumulative_alignment_additive[param]
+        _ = Structure.add_alignment_errors_to_structure(madx, elements_for_aligns, accumulative_alignment_additive)
+
         madx.input('use,sequence=RING;')
 
         # madx.input('ptc_create_universe;ptc_create_layout,model=2,method=2,nst=1;')
@@ -173,6 +187,7 @@ class Structure():
                                   accumulative_param_additive: np.ndarray,
                                   correctors: List[Tuple[str, int, float]],
                                   corrector_step: float = 1e-6,
+                                  elements_for_aligns=None,
                                   accumulative_alignment_additive=None,
                                   areErrorsNeeded=None) -> pd.DataFrame:
         """
@@ -197,6 +212,8 @@ class Structure():
         accumulative_param_additive_ = accumulative_param_additive.copy()
         for num, element in enumerate(elements_to_vary):
             madx.elements[element[1]].k1 = element[2] + accumulative_param_additive_[num]
+
+        _ = Structure.add_alignment_errors_to_structure(madx, elements_for_aligns, accumulative_alignment_additive)
 
         frames = []
         ## Jacobian = (f(x+dx)-f(x))/dx
@@ -227,7 +244,8 @@ class Structure():
                                                           quadrupole: Tuple[str, int, float],
                                                           gradient_step: float,
                                                           num: int,
-                                                          alignment_step: float = 1e-6) -> Tuple[pd.DataFrame, pd.DataFrame]:
+                                                          alignment_step: float = 1e-6) -> Tuple[
+        pd.DataFrame, pd.DataFrame]:
         alignments = ['dx', 'dy']
 
         madx = Madx(stdout=False)
@@ -335,24 +353,32 @@ class Structure():
         madx.quit()
         return matrix
 
-    def add_imperfections_to_structure(self,
-                                       elements_with_errors,
-                                       accumulative_alignment_additive,
-                                       error_magnitude=1e-6):
-        seed = np.random.randint(0, 999999999)
-        self.madx.input('eoption,seed=' + str(seed) + ',add=True;')
-
-        for element, dx, dy in zip(elements_with_errors, accumulative_alignment_additive,
-                                   accumulative_alignment_additive):
+    @staticmethod
+    def add_alignment_errors_to_structure(madx,
+                                          elements_with_errors,
+                                          accumulative_alignment_additive):
+        # seed = np.random.randint(0, 999999999)
+        # print('errors', accumulative_alignment_additive)
+        madx.input('eoption,seed=' + str(42) + ',add=True;')
+        for num, element in enumerate(elements_with_errors):
             madx.input('select,flag=error,pattern=' + element + ';')
-            madx.input('ealign,dx:=' + str(error_magnitude) + '*gauss(),dy:=' + str(error_magnitude) + '*gauss();')
+            # madx.input('ealign,dx:=' + str(error_magnitude) + '*gauss(),dy:=' + str(error_magnitude) + '*gauss();')
+            madx.input('ealign,dx:=' + str(accumulative_alignment_additive['dx'][num]) + ',dy:=' +
+                       str(accumulative_alignment_additive['dy'][num]) + ';')
             madx.input('select,flag=error,clear;')
 
-        madx.input('esave,file="madx/machine_imperfections";')
+        for element in elements_with_errors:
+            madx.input('select,flag=error,pattern=' + element + ';')
+
+        # madx.input('select,flag=error,class=quadrupole;')
+        # madx.input('esave,file="madx/machine_imperfections";')
         # madx.input('select,flag=myerrortable, class=quadrupole;')
         madx.input('etable,table=errors_table;')
 
-        errors_table = madx.table.errors_table
+        errors_table = {'dx': madx.table.errors_table.dx, 'dy': madx.table.errors_table.dy}
+        # print(errors_table)
+        return errors_table
+
 
 
 class Imperfection(Structure):

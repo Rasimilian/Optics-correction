@@ -6,6 +6,7 @@ from tqdm import tqdm
 from typing import List, Optional, Union, Tuple
 import multiprocessing as mp
 import ctypes
+from copy import deepcopy
 
 from cpymad.madx import Madx, TwissFailed
 from madx.madx_tool import Structure
@@ -15,7 +16,7 @@ from parallelizer.jacobian_parallelizing import parallelize
 
 class GaussNewton:
     def __init__(self, structure: Structure, correctors="madx/correctors/correctors.txt",
-                 elements_to_vary="madx/elements/elems.txt", corrector_step = 1e-6, grad_step: float = 1e-3, iteration: int = 2):
+                 elements_to_vary="madx/elements/quads.txt", corrector_step = 1e-6, grad_step: float = 1e-3, iteration: int = 2):
         self.structure = structure
         self.elements_to_vary, self.initial_parameters = describe_elements(self.structure.structure,
                                                                            elements_to_vary)
@@ -28,7 +29,10 @@ class GaussNewton:
         self.elements_number = len(self.elements_to_vary)
         # self.shape = [22, self.elements_number]
         self.shape = [22 * 108, self.elements_number]
+        self.shape = [22 * 108, 2 * self.elements_number]
         self.grad_step = grad_step
+        self.corrector_step = corrector_step
+        self.alignment_step = 1e-6
         self.iteration = iteration
         self.names = [element[0] for element in self.elements_to_vary]
 
@@ -57,17 +61,26 @@ class GaussNewton:
         :return: parameters deltas which fit erroneous structure
         """
         accumulative_param_additive = np.zeros(self.elements_number)
+        accumulative_alignment_additive = {'dx': np.zeros(self.elements_number), 'dy': np.zeros(self.elements_number)}
 
         bad_response_matrix = self.structure.calculate_response_matrix(self.structure.bad_structure,
                                                                        self.bad_elements_to_vary,
                                                                        accumulative_param_additive,
-                                                                       self.bad_correctors)
+                                                                       self.bad_correctors,
+                                                                       self.corrector_step,
+                                                                       self.names,
+                                                                       self.structure.initial_errors_table)
         model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
                                                                          self.elements_to_vary,
                                                                          accumulative_param_additive,
-                                                                         self.correctors)
+                                                                         self.correctors,
+                                                                         self.corrector_step,
+                                                                         self.names,
+                                                                         accumulative_alignment_additive)
         initial_vector, initial_residual = self._get_residual(bad_response_matrix, model_response_matrix)
-
+        # print('bad', bad_response_matrix)
+        # print('model', model_response_matrix)
+        # breakpoint()
         final_residual = 1000
         count = 1
         while count <= self.iteration:
@@ -75,20 +88,27 @@ class GaussNewton:
             model_response_matrix_1 = self.structure.calculate_response_matrix(self.structure.structure,
                                                                                self.elements_to_vary,
                                                                                accumulative_param_additive,
-                                                                               self.correctors)
+                                                                               self.correctors,
+                                                                               self.corrector_step,
+                                                                               self.names,
+                                                                               accumulative_alignment_additive)
             vector_1, _ = self._get_residual(bad_response_matrix, model_response_matrix_1)
 
-            # J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1)
-            J = parallelize(GaussNewton.calculate_jacobian_in_parallel, model_response_matrix_1,
-                            accumulative_param_additive,
-                            self.shape, "madx/structures/VEPP4M_full1.txt", self.grad_step, self.elements_to_vary,
-                            self.correctors)
+            J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1, accumulative_alignment_additive)
+            # J = parallelize(GaussNewton.calculate_jacobian_in_parallel, model_response_matrix_1,
+            #                 accumulative_param_additive,
+            #                 self.shape, "madx/structures/VEPP4M_full1.txt", self.grad_step, self.elements_to_vary,
+            #                 self.correctors)
 
             # jacob_to_write = pd.DataFrame(J, columns=self.names)
             # jacob_to_write.to_csv(f"madx//jacobian_{count}.csv",index=False,header=True,sep="\t")
             u, sv, v = self.drop_bad_singular_values(J)
             delta = self.calculate_parameters_delta(J, u, sv, v, vector_1)
-            accumulative_param_additive += delta
+            # accumulative_param_additive += delta[:self.elements_number]
+            # accumulative_alignment_additive['dx'] += delta[self.elements_number:2*self.elements_number]
+            # accumulative_alignment_additive['dy'] += delta[2*self.elements_number:3*self.elements_number]
+            accumulative_alignment_additive['dx'] += delta[0:self.elements_number]
+            accumulative_alignment_additive['dy'] += delta[self.elements_number:2 * self.elements_number]
 
             is_fitted = False
             k = 1
@@ -97,7 +117,10 @@ class GaussNewton:
                     fitted_model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
                                                                                             self.elements_to_vary,
                                                                                             accumulative_param_additive,
-                                                                                            self.correctors)
+                                                                                            self.correctors,
+                                                                                            self.corrector_step,
+                                                                                            self.names,
+                                                                                            accumulative_alignment_additive)
                     is_fitted = True
                 except TwissFailed:
                     accumulative_param_additive = np.where(np.abs(accumulative_param_additive) < k,
@@ -115,10 +138,12 @@ class GaussNewton:
             print("Final residual: ", final_residual)
             count += 1
 
-        return accumulative_param_additive, initial_residual, final_residual
+        return accumulative_param_additive, initial_residual, final_residual, accumulative_alignment_additive
 
-    def calculate_jacobian(self, accumulative_param_additive: np.ndarray,
-                           model_response_matrix_1: pd.DataFrame) -> np.ndarray:
+    def calculate_jacobian(self,
+                           accumulative_param_additive: np.ndarray,
+                           model_response_matrix_1: pd.DataFrame,
+                           accumulative_alignment_additive: np.ndarray) -> np.ndarray:
         """
         Function to calculate Jacobian.
 
@@ -127,21 +152,47 @@ class GaussNewton:
         :return: Jacobian
         """
         J = np.zeros(self.shape)
-        for i in tqdm(range(self.elements_number)):
-            # now = datetime.now()
-            # TODO remove variation using additive.copy()
-            accumulative_param_variation = np.zeros(self.elements_number)
-            accumulative_param_variation[i] = self.grad_step
-            accumulative_param_variation += accumulative_param_additive
+        i = 0
+        # for i in tqdm(range(self.elements_number)):
+        #     now = datetime.now()
+        #     # TODO remove variation using additive.copy()
+        #     accumulative_param_variation = np.zeros(self.elements_number)
+        #     accumulative_param_variation[i] = self.grad_step
+        #     accumulative_param_variation += accumulative_param_additive
+        #
+        #     model_response_matrix_2 = self.structure.calculate_response_matrix(self.structure.structure,
+        #                                                                        self.elements_to_vary,
+        #                                                                        accumulative_param_variation,
+        #                                                                        self.correctors,
+        #                                                                        self.corrector_step,
+        #                                                                        self.names,
+        #                                                                        accumulative_alignment_additive)
+        #     vector_2, _ = self._get_residual(model_response_matrix_1, model_response_matrix_2)
+        #
+        #     J[:, i] = vector_2 / self.grad_step
+        #     print(datetime.now() - now)
 
-            model_response_matrix_2 = self.structure.calculate_response_matrix(self.structure.structure,
-                                                                               self.elements_to_vary,
-                                                                               accumulative_param_variation,
-                                                                               self.correctors)
-            vector_2, _ = self._get_residual(model_response_matrix_1, model_response_matrix_2)
+        last_param = i
+        for param in accumulative_alignment_additive:
+            for i in tqdm(range(self.elements_number)):
+                now = datetime.now()
+                # TODO remove variation using additive.copy()
+                accumulative_param_variation = deepcopy(accumulative_alignment_additive)
+                accumulative_param_variation[param][i] += self.alignment_step
+                print(accumulative_param_variation)
 
-            J[:, i] = vector_2 / self.grad_step
-            # print(datetime.now() - now)
+                model_response_matrix_2 = self.structure.calculate_response_matrix(self.structure.structure,
+                                                                                   self.elements_to_vary,
+                                                                                   accumulative_param_additive,
+                                                                                   self.correctors,
+                                                                                   self.corrector_step,
+                                                                                   self.names,
+                                                                                   accumulative_param_variation)
+                vector_2, _ = self._get_residual(model_response_matrix_1, model_response_matrix_2)
+
+                J[:, last_param+i] = vector_2 / self.alignment_step
+                print(datetime.now() - now)
+            last_param += i
 
         return J
 
@@ -162,7 +213,7 @@ class GaussNewton:
         """
         J = []
         for i in tqdm(indices):
-            # now = datetime.now()
+            now = datetime.now()
             accumulative_param_variation = accumulative_param_additive.copy()
             accumulative_param_variation[i] += grad_step
 
@@ -174,7 +225,7 @@ class GaussNewton:
             vector_2 = (model_response_matrix_1 - model_response_matrix_2).to_numpy().flatten()
 
             J.append(vector_2 / grad_step)
-            # print(datetime.now() - now)
+            print(datetime.now() - now)
 
         return np.array(J).T
 
@@ -249,7 +300,7 @@ class GaussNewton:
 
 
 class LevenbergMarquardt(GaussNewton):
-    def __init__(self, structure: Structure, correctors, elements_to_vary, corrector_step, grad_step: float, iteration: int = 3,
+    def __init__(self, structure: Structure, correctors, elements_to_vary, corrector_step, grad_step: float, iteration: int = 8,
                  coefficient_lambda: float = 0.001):
         super().__init__(structure, correctors, elements_to_vary, corrector_step, grad_step, iteration)
         self.coefficient_lambda = coefficient_lambda
