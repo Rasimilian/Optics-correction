@@ -29,7 +29,7 @@ class GaussNewton:
         self.elements_number = len(self.elements_to_vary)
         # self.shape = [22, self.elements_number]
         self.shape = [22 * 108, self.elements_number]
-        self.shape = [22 * 108, 2 * self.elements_number]
+        self.shape = [22 * 54, 2 * self.elements_number]
         self.grad_step = grad_step
         self.corrector_step = corrector_step
         self.alignment_step = 1e-6
@@ -77,6 +77,9 @@ class GaussNewton:
                                                                          self.corrector_step,
                                                                          self.names,
                                                                          accumulative_alignment_additive)
+        # bad_response_matrix.to_csv('bad_response_matrix_test.csv',index=False,header=True,sep=";")
+        # model_response_matrix.to_csv('model_response_matrix_test.csv',index=False,header=True,sep=";")
+        # breakpoint()
         initial_vector, initial_residual = self._get_residual(bad_response_matrix, model_response_matrix)
         # print('bad', bad_response_matrix)
         # print('model', model_response_matrix)
@@ -102,12 +105,14 @@ class GaussNewton:
 
             # jacob_to_write = pd.DataFrame(J, columns=self.names)
             # jacob_to_write.to_csv(f"madx//jacobian_{count}.csv",index=False,header=True,sep="\t")
+            # print(J)
+
             u, sv, v = self.drop_bad_singular_values(J)
             delta = self.calculate_parameters_delta(J, u, sv, v, vector_1)
             # accumulative_param_additive += delta[:self.elements_number]
             # accumulative_alignment_additive['dx'] += delta[self.elements_number:2*self.elements_number]
             # accumulative_alignment_additive['dy'] += delta[2*self.elements_number:3*self.elements_number]
-            accumulative_alignment_additive['dx'] += delta[0:self.elements_number]
+            accumulative_alignment_additive['dx'] += delta[:self.elements_number]
             accumulative_alignment_additive['dy'] += delta[self.elements_number:2 * self.elements_number]
 
             is_fitted = False
@@ -192,7 +197,7 @@ class GaussNewton:
 
                 J[:, last_param+i] = vector_2 / self.alignment_step
                 print(datetime.now() - now)
-            last_param += i
+            last_param += i + 1
 
         return J
 
@@ -236,7 +241,8 @@ class GaussNewton:
         :param J: Jacobian
         :return: SVD decomposed Jacobian
         """
-        svd = np.linalg.svd(np.matmul(J.T, J), full_matrices=False)
+        # svd = np.linalg.svd(np.matmul(J.T, J), full_matrices=False)
+        svd = np.linalg.svd((J), full_matrices=False)
         u, sv, v = svd
         print("Singulars: ", sv)
 
@@ -265,7 +271,8 @@ class GaussNewton:
         """
         J_new = np.matmul(np.matmul(v.T, sv), u.T)
         # delta = -np.matmul(np.linalg.pinv(np.matmul(J.T,J)),J.T).dot(vector_1)
-        delta = -np.matmul(J_new, J.T).dot(vector_1)
+        # delta = -np.matmul(J_new, J.T).dot(vector_1)
+        delta = -J_new.dot(vector_1)
         print("delta", delta)
 
         return delta

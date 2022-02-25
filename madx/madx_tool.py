@@ -51,8 +51,8 @@ class Structure():
             quads = ['STL1', 'SIL1', 'SIL2']
             dx_error = np.zeros(len(quads))
             dy_error = np.zeros(len(quads))
-            dx_error[2] = 2e-5
-            dy_error[1] = 1e-5
+            dx_error[1] = 2e-5
+            dy_error[2] = 1e-5
             self.initial_errors_table = Structure.add_alignment_errors_to_structure(madx, quads, {'dx': dx_error, 'dy': dy_error})
             print(self.initial_errors_table)
 
@@ -212,26 +212,33 @@ class Structure():
         accumulative_param_additive_ = accumulative_param_additive.copy()
         for num, element in enumerate(elements_to_vary):
             madx.elements[element[1]].k1 = element[2] + accumulative_param_additive_[num]
-
+        twiss_in_BPMs = Structure.make_kick_by_corrector(correctors[0], madx, kick_step=0)
         _ = Structure.add_alignment_errors_to_structure(madx, elements_for_aligns, accumulative_alignment_additive)
 
         frames = []
+        frames_x = []
+        frames_y = []
         ## Jacobian = (f(x+dx)-f(x))/dx
         ## For f(x)
-        twiss_in_BPMs = Structure.make_kick_by_corrector(correctors[0], madx, kick_step=0)
+        # twiss_in_BPMs = Structure.make_kick_by_corrector(correctors[0], madx, kick_step=0)
         for corrector in correctors:
             ## For f(x+dx)
             twiss_in_BPMs_1 = Structure.make_kick_by_corrector(corrector, madx, corrector_step)
 
-            df_x = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0]) / corrector_step, columns=[corrector[0]])
-            df_y = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1]) / corrector_step, columns=[corrector[0]])
+            # df_x = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0]) / corrector_step, columns=[corrector[0]])
+            # df_y = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1]) / corrector_step, columns=[corrector[0]])
             # df_dx = pd.DataFrame((twiss_in_BPMs_1.dx - twiss_in_BPMs.dx)/variation_step, columns = [element[0]])
             # df_dy = pd.DataFrame((twiss_in_BPMs_1.dy - twiss_in_BPMs.dy)/variation_step, columns = [element[0]])
-
-            df = pd.concat([df_x, df_y], ignore_index=True)
+            if madx.elements[corrector[0]]._attr['parent'] == 'hkicker':
+                df = pd.DataFrame((twiss_in_BPMs_1[0] - twiss_in_BPMs[0]) / corrector_step, columns=[corrector[0]])
+                frames_x.append(df)
+            elif madx.elements[corrector[0]]._attr['parent'] == 'vkicker':
+                df = pd.DataFrame((twiss_in_BPMs_1[1] - twiss_in_BPMs[1]) / corrector_step, columns=[corrector[0]])
+                frames_y.append(df)
+            # df = pd.concat([df_x, df_y], ignore_index=True)
             # df = pd.concat([df_x,df_y,df_dx,df_dy], ignore_index = True)
-            frames.append(df)
-
+            # frames.append(df)
+        frames = frames_x + frames_y
         matrix = pd.concat(frames, axis=1)
         # print("Response Matrix:\n",matrix)
         # matrix.to_csv('madx//response_matrix.csv',index=False,header=True,sep="\t")
