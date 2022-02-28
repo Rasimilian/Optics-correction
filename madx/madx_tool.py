@@ -48,12 +48,12 @@ class Structure():
         # TODO add errors
         if initial_imperfections:
             # quads = ['stl1', 'stl2', 'stl3', 'stl4', 'sil1', 'sil2', 'sil3', 'sil4', 'sel5', 'sel4', 'sel3', 'sel2', 'sel1', 'nel1', 'nel2', 'nel3', 'nel4', 'nel5', 'nil4', 'nil3', 'nil2', 'nil1', 'ntl4', 'ntl3', 'ntl2', 'ntl1']
-            quads = ['STL1', 'SIL1', 'SIL2']
-            dx_error = np.zeros(len(quads))
-            dy_error = np.zeros(len(quads))
+            self.quads_with_alignments = ['STL1', 'SIL1', 'SIL2']
+            dx_error = np.zeros(len(self.quads_with_alignments))
+            dy_error = np.zeros(len(self.quads_with_alignments))
             dx_error[1] = 2e-5
             dy_error[2] = 1e-5
-            self.initial_errors_table = Structure.add_alignment_errors_to_structure(madx, quads, {'dx': dx_error, 'dy': dy_error})
+            self.initial_errors_table = Structure.add_alignment_errors_to_structure(madx, self.quads_with_alignments, {'dx': dx_error, 'dy': dy_error})
             print(self.initial_errors_table)
 
         # madx.input('select,flag=twiss,class=monitor;')

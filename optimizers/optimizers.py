@@ -68,7 +68,7 @@ class GaussNewton:
                                                                        accumulative_param_additive,
                                                                        self.bad_correctors,
                                                                        self.corrector_step,
-                                                                       self.names,
+                                                                       self.structure.quads_with_alignments,
                                                                        self.structure.initial_errors_table)
         model_response_matrix = self.structure.calculate_response_matrix(self.structure.structure,
                                                                          self.elements_to_vary,
@@ -77,13 +77,8 @@ class GaussNewton:
                                                                          self.corrector_step,
                                                                          self.names,
                                                                          accumulative_alignment_additive)
-        # bad_response_matrix.to_csv('bad_response_matrix_test.csv',index=False,header=True,sep=";")
-        # model_response_matrix.to_csv('model_response_matrix_test.csv',index=False,header=True,sep=";")
-        # breakpoint()
+
         initial_vector, initial_residual = self._get_residual(bad_response_matrix, model_response_matrix)
-        # print('bad', bad_response_matrix)
-        # print('model', model_response_matrix)
-        # breakpoint()
         final_residual = 1000
         count = 1
         while count <= self.iteration:
@@ -97,6 +92,7 @@ class GaussNewton:
                                                                                accumulative_alignment_additive)
             vector_1, _ = self._get_residual(bad_response_matrix, model_response_matrix_1)
 
+            # if count < 2:
             J = self.calculate_jacobian(accumulative_param_additive, model_response_matrix_1, accumulative_alignment_additive)
             # J = parallelize(GaussNewton.calculate_jacobian_in_parallel, model_response_matrix_1,
             #                 accumulative_param_additive,
@@ -156,10 +152,10 @@ class GaussNewton:
         :param model_response_matrix_1: interim response matrix
         :return: Jacobian
         """
-        J = np.zeros(self.shape)
-        i = 0
+        J = []
+
         # for i in tqdm(range(self.elements_number)):
-        #     now = datetime.now()
+        #     # now = datetime.now()
         #     # TODO remove variation using additive.copy()
         #     accumulative_param_variation = np.zeros(self.elements_number)
         #     accumulative_param_variation[i] = self.grad_step
@@ -174,13 +170,12 @@ class GaussNewton:
         #                                                                        accumulative_alignment_additive)
         #     vector_2, _ = self._get_residual(model_response_matrix_1, model_response_matrix_2)
         #
-        #     J[:, i] = vector_2 / self.grad_step
-        #     print(datetime.now() - now)
+        #     J.append(vector_2 / self.grad_step)
+            # print(datetime.now() - now)
 
-        last_param = i
         for param in accumulative_alignment_additive:
             for i in tqdm(range(self.elements_number)):
-                now = datetime.now()
+                # now = datetime.now()
                 # TODO remove variation using additive.copy()
                 accumulative_param_variation = deepcopy(accumulative_alignment_additive)
                 accumulative_param_variation[param][i] += self.alignment_step
@@ -195,11 +190,10 @@ class GaussNewton:
                                                                                    accumulative_param_variation)
                 vector_2, _ = self._get_residual(model_response_matrix_1, model_response_matrix_2)
 
-                J[:, last_param+i] = vector_2 / self.alignment_step
-                print(datetime.now() - now)
-            last_param += i + 1
+                J.append(vector_2 / self.alignment_step)
+                # print(datetime.now() - now)
 
-        return J
+        return np.array(J).T
 
     @staticmethod
     def calculate_jacobian_in_parallel(accumulative_param_additive: np.ndarray,
@@ -241,8 +235,8 @@ class GaussNewton:
         :param J: Jacobian
         :return: SVD decomposed Jacobian
         """
-        # svd = np.linalg.svd(np.matmul(J.T, J), full_matrices=False)
-        svd = np.linalg.svd((J), full_matrices=False)
+        svd = np.linalg.svd(np.matmul(J.T, J), full_matrices=False)
+        # svd = np.linalg.svd((J), full_matrices=False)
         u, sv, v = svd
         print("Singulars: ", sv)
 
@@ -271,8 +265,8 @@ class GaussNewton:
         """
         J_new = np.matmul(np.matmul(v.T, sv), u.T)
         # delta = -np.matmul(np.linalg.pinv(np.matmul(J.T,J)),J.T).dot(vector_1)
-        # delta = -np.matmul(J_new, J.T).dot(vector_1)
-        delta = -J_new.dot(vector_1)
+        delta = -np.matmul(J_new, J.T).dot(vector_1) # svd = np.linalg.svd(np.matmul(J.T, J), full_matrices=False)
+        # delta = -J_new.dot(vector_1) # svd = np.linalg.svd((J), full_matrices=False)
         print("delta", delta)
 
         return delta
@@ -307,7 +301,7 @@ class GaussNewton:
 
 
 class LevenbergMarquardt(GaussNewton):
-    def __init__(self, structure: Structure, correctors, elements_to_vary, corrector_step, grad_step: float, iteration: int = 8,
+    def __init__(self, structure: Structure, correctors, elements_to_vary, corrector_step, grad_step: float, iteration: int = 3,
                  coefficient_lambda: float = 0.001):
         super().__init__(structure, correctors, elements_to_vary, corrector_step, grad_step, iteration)
         self.coefficient_lambda = coefficient_lambda

@@ -13,9 +13,9 @@ if __name__ == "__main__":
 
     now = datetime.now()
     # optimizer = GaussNewton(structure, step=1e-3)
-    optimizer = GaussNewton(structure, "madx/correctors/correctors.txt", "madx/elements/quads_test.txt", 1e-6,
+    optimizer = GaussNewton(structure, "madx/correctors/correctors.txt", "madx/elements/quads.txt", 1e-6,
                                    grad_step=1e-3)
-    # optimizer = LevenbergMarquardt(structure, "madx/correctors/correctors.txt", "madx/elements/quads_test.txt", 1e-6, grad_step=1e-3)
+    # optimizer = LevenbergMarquardt(structure, "madx/correctors/correctors.txt", "madx/elements/quads.txt", 1e-6, grad_step=1e-3)
     # optimizer = GaussNewtonConstrained(structure, step=3e-3)
 
     parameters_delta, _, _, alignments_delta = optimizer.optimize_lattice()
