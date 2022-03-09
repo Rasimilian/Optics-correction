@@ -11,7 +11,7 @@ from element_parser.data_parser import read_elements_from_file, describe_element
 class Structure():
     def __init__(self,
                  structure_file: str = "madx/structures/VEPP4M_full1.txt",
-                 bad_structure_file: str = "madx/structures/VEPP4M_full1.txt"):
+                 bad_structure_file: str = "madx/structures/VEPP4M_full1_3_quads_errors.txt"):
         """
         Initialize class Structure.
 
@@ -51,8 +51,8 @@ class Structure():
             self.quads_with_alignments = ['STL1', 'SIL1', 'SIL2']
             dx_error = np.zeros(len(self.quads_with_alignments))
             dy_error = np.zeros(len(self.quads_with_alignments))
-            dx_error[1] = 2e-5
-            dy_error[2] = 1e-5
+            dx_error[1] = 0
+            dy_error[2] = 0
             self.initial_errors_table = Structure.add_alignment_errors_to_structure(madx, self.quads_with_alignments, {'dx': dx_error, 'dy': dy_error})
             print(self.initial_errors_table)
 
